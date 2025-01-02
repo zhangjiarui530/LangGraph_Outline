@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import os
 import sys
 from datetime import datetime
@@ -71,5 +72,9 @@ def main():
         import traceback
         print(traceback.format_exc())
         
+=======
+from my_agent.agent import main
+
+>>>>>>> c4972e73ce82ab596751226cd0a07e233d3db998
 if __name__ == "__main__":
     main() 

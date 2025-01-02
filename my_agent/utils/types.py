@@ -43,6 +43,7 @@ class AgentState(TypedDict):
     total_hours: Annotated[int, binary_first_value]  # 输入值使用first_value
     hours_per_section: Annotated[dict | None, binary_merge_dicts]  # 使用二元操作
     is_scanned: Annotated[bool, binary_first_value]  # 输入值使用first_value
+<<<<<<< HEAD
     error_msg: Annotated[str | None, binary_last_value]  # 错误信息使用last_value
     has_textbook: Annotated[bool, binary_first_value]  # 是否有教材
     is_image_type: Annotated[bool, binary_first_value]  # 是否是图片型PDF
@@ -50,3 +51,6 @@ class AgentState(TypedDict):
     textbook_content: Annotated[str, binary_first_value]  # 教材内容
     toc_content: Annotated[str, binary_first_value]  # 目录内容
     text_length: Annotated[int, binary_first_value]  # 文本长度
+=======
+    error_msg: Annotated[str | None, binary_last_value]  # 错误信息使用last_value
+>>>>>>> c4972e73ce82ab596751226cd0a07e233d3db998
