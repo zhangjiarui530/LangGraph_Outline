@@ -1,0 +1,7 @@
+PyMuPDF==1.23.7
+Pillow==10.1.0
+pytesseract==0.3.10
+python-dotenv==1.0.0
+openai==1.3.7
+langchain==0.0.350
+langgraph==0.0.10 
