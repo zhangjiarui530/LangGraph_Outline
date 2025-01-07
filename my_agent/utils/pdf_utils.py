@@ -32,7 +32,8 @@ def extract_text_from_pdf(file_path: str) -> Dict[str, Any]:
             
         content = {
             "title": "",
-            "chapters": []
+            "chapters": [],
+            "pdf_path": file_path
         }
         
         # 打开PDF文件
@@ -89,3 +90,61 @@ def get_pdf_metadata(file_path: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"获取PDF元数据失败: {str(e)}")
         raise PDFExtractionError(f"获取PDF元数据失败: {str(e)}") 
+    
+def has_table_of_contents(content: Dict[str, Any]) -> bool:
+    """检查内容是否包含目录
+    
+    通过检查文本内容的前几页，查找常见的目录标识来判断是否存在目录。
+    
+    Args:
+        content: 包含章节内容的字典，格式为：
+                {
+                    "title": str,
+                    "chapters": [
+                        {
+                            "page_number": int,
+                            "content": str
+                        },
+                        ...
+                    ]
+                }
+        
+    Returns:
+        bool: 是否包含目录
+    """
+    try:
+        if not content or not isinstance(content, dict):
+            return False
+            
+        chapters = content.get("chapters", [])
+        if not chapters:
+            return False
+            
+        # 只检查前5页
+        max_pages = min(5, len(chapters))
+        
+        # 目录的常见标识
+        toc_indicators = [
+            "目录",
+            "contents",
+            "table of contents",
+            "章节",
+            "第.*章",
+            "第.*单元"
+        ]
+        
+        # 检查每一页
+        for chapter in chapters[:max_pages]:
+            text = chapter.get("content", "").lower()
+            
+            # 检查是否包含目录标识
+            for indicator in toc_indicators:
+                if indicator in text.lower():
+                    return True
+                    
+        return False
+        
+    except Exception as e:
+        print(f"检查目录失败: {str(e)}")
+        return False 
+    

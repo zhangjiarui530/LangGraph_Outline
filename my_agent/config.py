@@ -10,7 +10,7 @@ class LLMConfig:
     """LLM配置"""
     model: str
     client: any
-    temperature: float = 0.3
+    temperature: float = 0.2
     
 def get_llm() -> LLMConfig:
     """
@@ -26,5 +26,5 @@ def get_llm() -> LLMConfig:
     return LLMConfig(
         model="glm-4-air",
         client=client,
-        temperature=0.3
+        temperature=0.2
     )

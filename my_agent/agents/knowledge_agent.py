@@ -1,20 +1,18 @@
 from typing import Dict, Any, List, Optional
 from my_agent.config import get_llm
 from my_agent.utils.exceptions import LLMGenerationError
-from my_agent.utils.types import AgentState
 import json
 
-def analyze_knowledge(content: Optional[Dict[str, Any]], objectives: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_knowledge(content: Dict[str, Any], objectives: Dict[str, Any], grade: str, subject: str) -> Dict[str, Any]:
     """分析知识点"""
     try:
         # 获取LLM配置
         llm_config = get_llm()
         
         # 构建提示词
+        content_json = json.dumps(content, indent=2, ensure_ascii=False)
         objectives_json = json.dumps(objectives, indent=2, ensure_ascii=False)
-        if content:
-            content_json = json.dumps(content, indent=2, ensure_ascii=False)
-            template = """作为一名资深的语文教师，请基于以下教材内容和教学目标分析知识点。
+        template = """作为一名资深的{subject}教师，请基于以下教材内容和教学目标为{grade}学生分析知识点。
 
 教材内容：
 {content}
@@ -22,19 +20,22 @@ def analyze_knowledge(content: Optional[Dict[str, Any]], objectives: Dict[str, A
 教学目标：
 {objectives}
 
-请分析并整理知识点体系，要求：
-1. 知识点要完整覆盖教材内容和教学目标
-2. 区分基础知识点和拓展知识点
-3. 明确标注重点和难点
-4. 每个知识点要说明：
-   - 具体内容和范围
-   - 难度等级（容易/中等/困难）
-   - 重要程度（一般/重要/核心）
-   - 前置知识要求
-   - 对应的教学目标
+请分析并输出完整的知识点体系，要求：
+1. 将知识点分为基础和拓展两个层次
+2. 每个知识点要说明：
+   - 名称
+   - 具体内容
+   - 难度（简单/中等/困难）
+   - 重要程度（核心/重要/一般）
+   - 前置知识点
+   - 对应教学目标
    - 教学建议
-5. 知识点之间要体现内在联系和层次关系
-6. 要符合语文学科特点和学生认知规律
+3. 分析要：
+   - 符合{subject}学科特点
+   - 体现教学目标
+   - 难度符合{grade}学生认知水平
+   - 逻辑合理
+   - 便于教学
 
 请按以下格式输出：
 {{
@@ -43,10 +44,10 @@ def analyze_knowledge(content: Optional[Dict[str, Any]], objectives: Dict[str, A
             {{
                 "name": "知识点名称",
                 "content": "具体内容",
-                "difficulty": "容易/中等/困难",
-                "importance": "一般/重要/核心",
+                "difficulty": "难度",
+                "importance": "重要程度",
                 "prerequisites": ["前置知识点1", "前置知识点2"],
-                "objectives": ["对应的教学目标1", "对应的教学目标2"],
+                "objectives": ["对应目标1", "对应目标2"],
                 "teaching_suggestions": "教学建议"
             }}
         ],
@@ -54,59 +55,10 @@ def analyze_knowledge(content: Optional[Dict[str, Any]], objectives: Dict[str, A
             {{
                 "name": "知识点名称",
                 "content": "具体内容",
-                "difficulty": "容易/中等/困难",
-                "importance": "一般/重要/核心",
+                "difficulty": "难度",
+                "importance": "重要程度",
                 "prerequisites": ["前置知识点1", "前置知识点2"],
-                "objectives": ["对应的教学目标1", "对应的教学目标2"],
-                "teaching_suggestions": "教学建议"
-            }}
-        ],
-        "key_points": ["重点1", "重点2"],
-        "difficult_points": ["难点1", "难点2"]
-    }}
-}}"""
-        else:
-            template = """作为一名资深的语文教师，请基于以下教学目标设计知识点体系。
-
-教学目标：
-{objectives}
-
-请设计完整的知识点体系，要求：
-1. 知识点要完整覆盖教学目标
-2. 区分基础知识点和拓展知识点
-3. 明确标注重点和难点
-4. 每个知识点要说明：
-   - 具体内容和范围
-   - 难度等级（容易/中等/困难）
-   - 重要程度（一般/重要/核心）
-   - 前置知识要求
-   - 对应的教学目标
-   - 教学建议
-5. 知识点之间要体现内在联系和层次关系
-6. 要符合语文学科特点和学生认知规律
-
-请按以下格式输出：
-{{
-    "knowledge_points": {{
-        "basic": [
-            {{
-                "name": "知识点名称",
-                "content": "具体内容",
-                "difficulty": "容易/中等/困难",
-                "importance": "一般/重要/核心",
-                "prerequisites": ["前置知识点1", "前置知识点2"],
-                "objectives": ["对应的教学目标1", "对应的教学目标2"],
-                "teaching_suggestions": "教学建议"
-            }}
-        ],
-        "advanced": [
-            {{
-                "name": "知识点名称",
-                "content": "具体内容",
-                "difficulty": "容易/中等/困难",
-                "importance": "一般/重要/核心",
-                "prerequisites": ["前置知识点1", "前置知识点2"],
-                "objectives": ["对应的教学目标1", "对应的教学目标2"],
+                "objectives": ["对应目标1", "对应目标2"],
                 "teaching_suggestions": "教学建议"
             }}
         ],
@@ -116,8 +68,10 @@ def analyze_knowledge(content: Optional[Dict[str, Any]], objectives: Dict[str, A
 }}"""
 
         prompt = template.format(
-            content=content_json if content else "",
-            objectives=objectives_json
+            content=content_json,
+            objectives=objectives_json,
+            grade=grade,
+            subject=subject
         )
 
         print("\n=== 分析知识点 ===")
@@ -127,7 +81,7 @@ def analyze_knowledge(content: Optional[Dict[str, Any]], objectives: Dict[str, A
         response = llm_config.client.chat.completions.create(
             model=llm_config.model,
             messages=[
-                {"role": "system", "content": "你是一个专业的语文教师，擅长分析和组织知识点体系。你的分析要符合新课标要求，体现学科特点。"},
+                {"role": "system", "content": f"你是一个专业的{subject}教师，擅长分析教材知识点。你的分析要符合新课标要求，体现{subject}学科特点，适合{grade}学生的认知水平。"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
@@ -146,10 +100,30 @@ def analyze_knowledge(content: Optional[Dict[str, Any]], objectives: Dict[str, A
         print(f"错误：分析知识点失败 - {str(e)}")
         return {
             "knowledge_points": {
-                "basic": [],
-                "advanced": [],
-                "key_points": [],
-                "difficult_points": []
+                "basic": [
+                    {
+                        "name": "基础知识点",
+                        "content": "暂无内容",
+                        "difficulty": "中等",
+                        "importance": "核心",
+                        "prerequisites": [],
+                        "objectives": [],
+                        "teaching_suggestions": "暂无建议"
+                    }
+                ],
+                "advanced": [
+                    {
+                        "name": "拓展知识点",
+                        "content": "暂无内容",
+                        "difficulty": "困难",
+                        "importance": "重要",
+                        "prerequisites": [],
+                        "objectives": [],
+                        "teaching_suggestions": "暂无建议"
+                    }
+                ],
+                "key_points": ["暂无重点"],
+                "difficult_points": ["暂无难点"]
             }
         }
 

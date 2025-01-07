@@ -1,10 +1,9 @@
 from typing import Dict, Any, List
 from my_agent.config import get_llm
 from my_agent.utils.exceptions import LLMGenerationError
-from my_agent.utils.types import AgentState
 import json
 
-def create_assessment(objectives: Dict[str, Any], knowledge_points: Dict[str, Any]) -> Dict[str, Any]:
+def create_assessment(objectives: Dict[str, Any], knowledge_points: Dict[str, Any], grade: str = "7年级", subject: str = "语文") -> Dict[str, Any]:
     """创建评估方案"""
     try:
         # 获取LLM配置
@@ -13,7 +12,7 @@ def create_assessment(objectives: Dict[str, Any], knowledge_points: Dict[str, An
         # 构建提示词
         objectives_json = json.dumps(objectives, indent=2, ensure_ascii=False)
         knowledge_json = json.dumps(knowledge_points, indent=2, ensure_ascii=False)
-        template = """作为一名资深的语文教师，请基于以下教学目标和知识点设计评估方案。
+        template = """作为一名资深的{subject}教师，请基于以下教学目标和知识点为{grade}学生设计评估方案。
 
 教学目标：
 {objectives}
@@ -41,10 +40,10 @@ def create_assessment(objectives: Dict[str, Any], knowledge_points: Dict[str, An
 4. 评估设计要：
    - 注重过程性评价
    - 关注学生发展
-   - 体现能力导向
+   - 体现{subject}学科特点
    - 突出应用实践
    - 重视情感态度
-   - 考虑个体差异
+   - 考虑{grade}学生特点
    - 保证科学公平
 
 请按以下格式输出：
@@ -89,7 +88,9 @@ def create_assessment(objectives: Dict[str, Any], knowledge_points: Dict[str, An
 
         prompt = template.format(
             objectives=objectives_json,
-            knowledge=knowledge_json
+            knowledge=knowledge_json,
+            grade=grade,
+            subject=subject
         )
 
         print("\n=== 设计评估方案 ===")

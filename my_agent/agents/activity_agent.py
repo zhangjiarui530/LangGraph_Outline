@@ -1,10 +1,9 @@
 from typing import Dict, Any, List
 from my_agent.config import get_llm
 from my_agent.utils.exceptions import LLMGenerationError
-from my_agent.utils.types import AgentState
 import json
 
-def design_activities(knowledge_points: Dict[str, Any], total_hours: int) -> Dict[str, Any]:
+def design_activities(knowledge_points: Dict[str, Any], total_hours: int, grade: str = "7年级", subject: str = "语文") -> Dict[str, Any]:
     """设计教学活动"""
     try:
         # 获取LLM配置
@@ -12,7 +11,7 @@ def design_activities(knowledge_points: Dict[str, Any], total_hours: int) -> Dic
         
         # 构建提示词
         knowledge_json = json.dumps(knowledge_points, indent=2, ensure_ascii=False)
-        template = """作为一名资深的语文教师，请基于以下知识点和总课时设计教学活动。
+        template = """作为一名资深的{subject}教师，请基于以下知识点为{grade}学生设计教学活动。
 
 知识点：
 {knowledge}
@@ -33,11 +32,11 @@ def design_activities(knowledge_points: Dict[str, Any], total_hours: int) -> Dic
    - 预期效果
    - 课后作业和延伸
 4. 活动设计要：
-   - 符合语文学科特点
+   - 符合{subject}学科特点
    - 体现学生主体性
    - 注重能力培养
    - 关注情感态度
-   - 适应学生水平
+   - 适应{grade}学生水平
    - 形式丰富多样
    - 理论联系实际
 
@@ -70,7 +69,9 @@ def design_activities(knowledge_points: Dict[str, Any], total_hours: int) -> Dic
 
         prompt = template.format(
             knowledge=knowledge_json,
-            hours=total_hours
+            hours=total_hours,
+            grade=grade,
+            subject=subject
         )
 
         print("\n=== 设计教学活动 ===")

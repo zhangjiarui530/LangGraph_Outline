@@ -2,30 +2,22 @@ import os
 import sys
 from datetime import datetime
 from my_agent.agent import TeachingAgent
-
-# 默认教材路径
-DEFAULT_TEXTBOOK_PATH = r"C:\Users\Intel\Desktop\Dase2025\4_OpenTeacherAssistant\langgraphoutline\textbooks\普通高中教科书·语文必修 下册.pdf"
+from my_agent.utils.configuration import Configuration
 
 def main():
     """主函数"""
     print("\n=== 教学大纲生成器 ===")
     
-    # 获取PDF路径
-    pdf_path = DEFAULT_TEXTBOOK_PATH
-    if len(sys.argv) > 1:
-        pdf_path = sys.argv[1]
+    # 从命令行参数创建配置
+    config = Configuration.from_cli_args(sys.argv)
     
     # 检查文件是否存在
-    if not os.path.exists(pdf_path):
-        print(f"错误：文件 {pdf_path} 不存在")
+    if not os.path.exists(config.pdf_path):
+        print(f"错误：文件 {config.pdf_path} 不存在")
         return
-        
-    # 固定总课时为16
-    total_hours = 16
     
-    print(f"\n=== 配置信息 ===")
-    print(f"教材文件：{pdf_path}")
-    print(f"总课时：{total_hours}")
+    # 打印配置信息
+    config.print_config()
     print("\n=== 开始处理 ===")
     
     # 创建代理并运行
@@ -34,7 +26,7 @@ def main():
         agent = TeachingAgent()
         
         print("2. 开始处理教材...")
-        result = agent.run(pdf_path=pdf_path, total_hours=total_hours)
+        result = agent.run(**config.to_dict())
         
         print("3. 处理完成，输出日志...")
         # 打印处理日志
@@ -54,13 +46,13 @@ def main():
             
         # 检查结果
         print("\n=== 结果验证 ===")
-        if not result.get("teaching_objectives"):
+        if not result.get("objectives"):
             print("警告：未生成教学目标")
         if not result.get("knowledge_points"):
             print("警告：未生成知识点")
-        if not result.get("teaching_activities"):
+        if not result.get("activities"):
             print("警告：未生成教学活动")
-        if not result.get("assessment_plan"):
+        if not result.get("assessment"):
             print("警告：未生成评估方案")
             
         print("\n=== 生成完成 ===")
