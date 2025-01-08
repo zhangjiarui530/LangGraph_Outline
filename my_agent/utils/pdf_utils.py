@@ -120,31 +120,93 @@ def has_table_of_contents(content: Dict[str, Any]) -> bool:
         if not chapters:
             return False
             
-        # 只检查前5页
+        # 检查前5页
         max_pages = min(5, len(chapters))
         
-        # 目录的常见标识
+        # 目录的常见标识（与extract_toc_content保持一致）
         toc_indicators = [
-            "目录",
+            "目\s*录",
             "contents",
-            "table of contents",
-            "章节",
-            "第.*章",
-            "第.*单元"
+            "table\s+of\s+contents",
+            "章\s*节\s*目\s*录",
+            "教\s*材\s*目\s*录",
+            "目\s*次"
         ]
         
+        import re
         # 检查每一页
         for chapter in chapters[:max_pages]:
-            text = chapter.get("content", "").lower()
-            
-            # 检查是否包含目录标识
-            for indicator in toc_indicators:
-                if indicator in text.lower():
-                    return True
+            text = chapter.get("content", "").strip()
+            if not text:
+                continue
+                
+            # 按行检查
+            for line in text.split('\n'):
+                line = line.strip().lower()
+                if not line:
+                    continue
+                    
+                # 使用正则表达式匹配
+                for indicator in toc_indicators:
+                    if re.search(indicator.lower(), line):
+                        print(f"检测到目录标识：{line}")
+                        return True
                     
         return False
         
     except Exception as e:
         print(f"检查目录失败: {str(e)}")
-        return False 
+        return False
+
+def extract_toc_content(content: Dict[str, Any]) -> str:
+    """从教材内容中提取目录部分
     
+    Args:
+        content: 教材内容字典
+        
+    Returns:
+        str: 目录内容
+    """
+    try:
+        if not content or not isinstance(content, dict):
+            return ""
+            
+        chapters = content.get("chapters", [])
+        if not chapters:
+            return ""
+            
+        # 只检查前10页
+        max_pages = min(10, len(chapters))
+        
+        # 目录的常见标识
+        toc_indicators = [
+            "目录",
+            "contents",
+            "table of contents"
+        ]
+        
+        # 提取目录内容
+        toc_content = []
+        in_toc = False
+        
+        for chapter in chapters[:max_pages]:
+            text = chapter.get("content", "").lower()  # 转换为小写以便比较
+            
+            # 检查是否进入目录部分
+            if not in_toc:
+                for indicator in toc_indicators:
+                    if indicator in text:
+                        in_toc = True
+                        toc_content.append(chapter.get("content", ""))  # 保留原始文本
+                        break
+            else:
+                # 检查是否已经离开目录部分（通过检测是否出现正文、前言等标识）
+                if any(x in text for x in ["第一章", "前言", "绪论", "正文", "第一单元", "第一节", "第一课"]):
+                    break
+                toc_content.append(chapter.get("content", ""))  # 保留原始文本
+                
+        return "\n".join(toc_content)
+        
+    except Exception as e:
+        print(f"提取目录内容失败: {str(e)}")
+        return ""

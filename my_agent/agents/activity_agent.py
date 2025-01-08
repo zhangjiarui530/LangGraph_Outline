@@ -3,111 +3,67 @@ from my_agent.config import get_llm
 from my_agent.utils.exceptions import LLMGenerationError
 import json
 
-def design_activities(knowledge_points: Dict[str, Any], total_hours: int, grade: str = "7年级", subject: str = "语文") -> Dict[str, Any]:
+def design_activities(knowledge_points: Dict[str, Any], total_hours: int, grade: str, subject: str) -> str:
     """设计教学活动"""
+    llm = get_llm()
+    prompt = f"""作为一名资深的{subject}教师，请仔细阅读教材知识点内容，设计教学活动。
+
+请首先分析教材的以下几个方面：
+1. 教材内容的编排特点
+2. 各单元活动的设计思路
+3. 教材中的练习和实践活动
+4. 教材提供的拓展资源
+
+然后基于以上分析，设计教学活动。要求：
+1. 输出采用markdown格式，结构清晰，层次分明，全部使用中文
+2. 教学活动设计应包含以下部分：
+
+### 活动1：基础知识学习
+
+[此处结合教材内容，详细说明活动设计，包含：
+- **活动名称**：与教材内容相关的具体活动名称
+- **对应章节**：该活动对应的教材章节
+- **活动类型**：讲授/讨论/练习/实践
+- **课时安排**：具体课时数
+- **教学内容**：与教材内容直接对应的具体教学内容
+- **教学目标**：2-3个与教材内容相关的具体目标
+- **重难点**：基于教材内容的2-3个教学重点和难点
+- **教学方法**：针对教材内容的具体教学方法
+- **学生活动**：学生在课堂上的具体学习活动
+- **预期效果**：2-3个与教材内容相关的具体预期效果
+- **课后作业**：基于教材内容的具体作业设计
+- **拓展活动**：结合教材资源的2-3个拓展活动建议]
+
+[按照上述格式设计8-10个教学活动，每个活动都要与教材的具体章节和知识点对应]
+
+### 课时分配表
+
+- **基础知识讲授**：{total_hours * 0.3}课时
+- **技能训练**：{total_hours * 0.3}课时
+- **实践活动**：{total_hours * 0.2}课时
+- **讨论交流**：{total_hours * 0.1}课时
+- **测评反馈**：{total_hours * 0.1}课时
+
+注意事项：
+1. 每个活动都要明确指出与教材内容的对应关系
+2. 活动设计要与知识点和教学目标相对应
+3. 活动的难度要循序渐进，符合{grade}学生的认知规律
+4. 教学方法要多样化，注重学生的参与度
+5. 课后作业和拓展活动要紧密结合教材内容
+
+知识点内容如下：
+{knowledge_points}
+"""
+    
     try:
-        # 获取LLM配置
-        llm_config = get_llm()
-        
-        # 构建提示词
-        knowledge_json = json.dumps(knowledge_points, indent=2, ensure_ascii=False)
-        template = """作为一名资深的{subject}教师，请基于以下知识点为{grade}学生设计教学活动。
-
-知识点：
-{knowledge}
-
-总课时：{hours}课时（每课时45分钟）
-
-请设计完整的教学活动方案，要求：
-1. 活动要完整覆盖所有知识点
-2. 合理分配课时，确保重点内容有充足时间
-3. 每个活动要说明：
-   - 活动名称和类型（讲授/讨论/练习等）
-   - 具体内容和流程
-   - 所需课时
-   - 教学目标
-   - 重点和难点
-   - 教学方法和策略
-   - 学生参与方式
-   - 预期效果
-   - 课后作业和延伸
-4. 活动设计要：
-   - 符合{subject}学科特点
-   - 体现学生主体性
-   - 注重能力培养
-   - 关注情感态度
-   - 适应{grade}学生水平
-   - 形式丰富多样
-   - 理论联系实际
-
-请按以下格式输出：
-{{
-    "activities": [
-        {{
-            "name": "活动名称",
-            "type": "活动类型",
-            "content": "具体内容",
-            "duration": "课时数",
-            "objectives": ["教学目标1", "教学目标2"],
-            "key_points": ["重点1", "重点2"],
-            "difficult_points": ["难点1", "难点2"],
-            "methods": ["教学方法1", "教学方法2"],
-            "student_participation": "学生参与方式",
-            "expected_outcomes": ["预期效果1", "预期效果2"],
-            "homework": "课后作业",
-            "extensions": ["延伸活动1", "延伸活动2"]
-        }}
-    ],
-    "time_allocation": {{
-        "knowledge": "知识讲授课时",
-        "skill": "技能训练课时",
-        "practice": "实践活动课时",
-        "discussion": "讨论交流课时",
-        "assessment": "测试评价课时"
-    }}
-}}"""
-
-        prompt = template.format(
-            knowledge=knowledge_json,
-            hours=total_hours,
-            grade=grade,
-            subject=subject
+        response = llm.client.chat.completions.create(
+            model=llm.model,
+            temperature=llm.temperature,
+            messages=[{"role": "user", "content": prompt}]
         )
-
-        print("\n=== 设计教学活动 ===")
-        print("调用LLM设计教学活动...")
-        
-        # 调用LLM
-        response = llm_config.client.chat.completions.create(
-            model=llm_config.model,
-            messages=[
-                {"role": "system", "content": "你是一个专业的语文教师，擅长设计教学活动。你的设计要符合新课标要求，体现学科特点。"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            response_format={"type": "json_object"}
-        )
-        
-        # 解析响应
-        result = response.choices[0].message.content
-        if isinstance(result, str):
-            result = json.loads(result)
-            
-        print("教学活动设计完成")
-        return result
-        
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"错误：设计教学活动失败 - {str(e)}")
-        return {
-            "activities": [],
-            "time_allocation": {
-                "knowledge": 0,
-                "skill": 0,
-                "practice": 0,
-                "discussion": 0,
-                "assessment": 0
-            }
-        }
+        raise LLMGenerationError(f"生成教学活动失败: {str(e)}")
 
 def validate_activities(activities: Dict[str, Any], total_hours: int) -> None:
     """

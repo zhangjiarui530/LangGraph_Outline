@@ -3,131 +3,83 @@ from my_agent.config import get_llm
 from my_agent.utils.exceptions import LLMGenerationError
 import json
 
-def create_assessment(objectives: Dict[str, Any], knowledge_points: Dict[str, Any], grade: str = "7年级", subject: str = "语文") -> Dict[str, Any]:
+def create_assessment(objectives: Dict[str, Any], knowledge_points: Dict[str, Any], grade: str, subject: str) -> str:
     """创建评估方案"""
-    try:
-        # 获取LLM配置
-        llm_config = get_llm()
-        
-        # 构建提示词
-        objectives_json = json.dumps(objectives, indent=2, ensure_ascii=False)
-        knowledge_json = json.dumps(knowledge_points, indent=2, ensure_ascii=False)
-        template = """作为一名资深的{subject}教师，请基于以下教学目标和知识点为{grade}学生设计评估方案。
+    llm = get_llm()
+    prompt = f"""作为一名资深的{subject}教师，请仔细阅读教材内容、教学目标和知识点，设计评估方案。
 
-教学目标：
+请首先分析教材的以下几个方面：
+1. 教材的考核要点分布
+2. 各单元的重难点设置
+3. 教材提供的练习和测试
+4. 学科核心素养的考查要求
+
+然后基于以上分析，设计评估方案。要求：
+1. 输出采用markdown格式，结构清晰，层次分明，全部使用中文
+2. 评估方案应包含以下部分：
+
+### 形成性评价
+
+[此处结合教材内容，列出6-8个形成性评价项目，每个项目包含：
+- **评价项目**：与教材内容直接相关的具体评价项目
+- **对应章节**：该评价项目对应的教材章节
+- **评价方式**：具体的评价方法
+- **分值设置**：具体的分值分配
+- **评价时间**：在教学过程中的具体实施时间
+- **评价标准**：2-3个基于教材内容的具体评价标准
+- **实施要点**：评价过程中需要注意的具体问题]
+
+### 终结性评价
+
+[此处结合教材重点内容，列出2-3个终结性评价项目，每个项目包含：
+- **评价项目**：与教材重点内容相关的具体评价项目
+- **考查范围**：具体对应的教材章节和内容
+- **评价方式**：具体的评价方法
+- **分值设置**：具体的分值分配
+- **评价时间**：具体的评价时间安排
+- **评价标准**：2-3个基于教材内容的具体评价标准
+- **实施要点**：评价过程中需要注意的具体问题]
+
+### 评价权重分配
+
+- **形成性评价**：60%，包括：
+  - 课堂表现：20%
+  - 作业完成：20%
+  - 实践活动：20%
+- **终结性评价**：40%，包括：
+  - 期中测试：15%
+  - 期末考试：25%
+
+### 反馈与改进机制
+
+[此处结合教材特点，列出4种反馈方式，每种方式包含：
+- **反馈方式**：具体的反馈方式描述
+- **适用内容**：该反馈方式适用的教材内容
+- **反馈时机**：在教学过程中的具体反馈时间
+- **实施方法**：如何具体实施这种反馈]
+
+注意事项：
+1. 每个评价项目都要与教材内容直接对应
+2. 评价标准要具体、可测量、可操作
+3. 评价方式要多样化，注重过程性评价
+4. 反馈要及时、有效，促进学生改进
+5. 所有评价活动要符合{grade}学生的认知水平
+6. 评价内容要覆盖教材的重点、难点
+
+教学目标和知识点如下：
 {objectives}
+{knowledge_points}
+"""
 
-知识点：
-{knowledge}
-
-请设计完整的评估方案，要求：
-1. 评估要全面覆盖教学目标和知识点
-2. 评估方式要多样化，包括：
-   - 课堂观察
-   - 口头提问
-   - 作业练习
-   - 小组讨论
-   - 实践活动
-   - 测试考查
-   - 自评互评
-3. 每个评估项目要说明：
-   - 评估内容
-   - 评估方式
-   - 评估标准
-   - 分值分配
-   - 实施时间
-   - 注意事项
-4. 评估设计要：
-   - 注重过程性评价
-   - 关注学生发展
-   - 体现{subject}学科特点
-   - 突出应用实践
-   - 重视情感态度
-   - 考虑{grade}学生特点
-   - 保证科学公平
-
-请按以下格式输出：
-{{
-    "assessment_plan": {{
-        "formative": [
-            {{
-                "name": "评估项目名称",
-                "content": "评估内容",
-                "method": "评估方式",
-                "criteria": ["评估标准1", "评估标准2"],
-                "score": "分值分配",
-                "timing": "实施时间",
-                "notes": "注意事项"
-            }}
-        ],
-        "summative": [
-            {{
-                "name": "评估项目名称",
-                "content": "评估内容",
-                "method": "评估方式",
-                "criteria": ["评估标准1", "评估标准2"],
-                "score": "分值分配",
-                "timing": "实施时间",
-                "notes": "注意事项"
-            }}
-        ],
-        "weight": {{
-            "formative": "过程性评价权重",
-            "summative": "终结性评价权重"
-        }}
-    }},
-    "feedback_methods": [
-        {{
-            "type": "反馈类型",
-            "description": "具体描述",
-            "timing": "反馈时机",
-            "format": "反馈形式"
-        }}
-    ]
-}}"""
-
-        prompt = template.format(
-            objectives=objectives_json,
-            knowledge=knowledge_json,
-            grade=grade,
-            subject=subject
+    try:
+        response = llm.client.chat.completions.create(
+            model=llm.model,
+            temperature=llm.temperature,
+            messages=[{"role": "user", "content": prompt}]
         )
-
-        print("\n=== 设计评估方案 ===")
-        print("调用LLM设计评估方案...")
-        
-        # 调用LLM
-        response = llm_config.client.chat.completions.create(
-            model=llm_config.model,
-            messages=[
-                {"role": "system", "content": "你是一个专业的语文教师，擅长设计教学评估方案。你的设计要符合新课标要求，体现学科特点。"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            response_format={"type": "json_object"}
-        )
-        
-        # 解析响应
-        result = response.choices[0].message.content
-        if isinstance(result, str):
-            result = json.loads(result)
-            
-        print("评估方案设计完成")
-        return result
-        
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"错误：设计评估方案失败 - {str(e)}")
-        return {
-            "assessment_plan": {
-                "formative": [],
-                "summative": [],
-                "weight": {
-                    "formative": 0,
-                    "summative": 0
-                }
-            },
-            "feedback_methods": []
-        }
+        raise LLMGenerationError(f"生成评估方案失败: {str(e)}")
 
 def validate_assessment(assessment: Dict[str, Any]) -> None:
     """

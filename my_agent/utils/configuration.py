@@ -1,64 +1,59 @@
 from dataclasses import dataclass
 from typing import Optional
 import os
+from dotenv import load_dotenv
 
-DEFAULT_PDF_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    "textbooks",
-    "普通高中教科书·语文必修 下册.pdf"
-)
+load_dotenv()
 
 @dataclass(kw_only=True)
 class Configuration:
     """教学大纲生成器的配置参数"""
     
-    # 教材文件路径
-    pdf_path: str = DEFAULT_PDF_PATH
+    # LLM配置
+    model_name: str = "glm-4-air"
+    temperature: float = 0.2
+    api_key: Optional[str] = None
     
-    # 课程基本信息
-    total_hours: int = 16
-    grade: str = "7年级"
-    subject: str = "语文"
+    def __post_init__(self):
+        """初始化后的处理"""
+        # 如果没有提供api_key，从环境变量获取
+        if self.api_key is None:
+            self.api_key = os.getenv("ZHIPU_API_KEY")
+            if not self.api_key:
+                raise ValueError("未设置ZHIPU_API_KEY环境变量")
     
     @classmethod
     def from_cli_args(cls, args: list) -> "Configuration":
         """从命令行参数创建配置实例"""
         values = {}
-        
-        # 解析命令行参数
-        if len(args) > 1:
-            values["pdf_path"] = args[1]
-        if len(args) > 2:
-            values["total_hours"] = int(args[2])
-        if len(args) > 3:
-            values["grade"] = args[3]
-        if len(args) > 4:
-            values["subject"] = args[4]
             
         # 使用环境变量覆盖默认值
-        for field in ["pdf_path", "total_hours", "grade", "subject"]:
-            env_value = os.environ.get(f"TEACHING_PLAN_{field.upper()}")
+        env_map = {
+            "model_name": "TEACHING_PLAN_MODEL",
+            "temperature": "TEACHING_PLAN_TEMPERATURE",
+            "api_key": "ZHIPU_API_KEY"
+        }
+        
+        for field, env_key in env_map.items():
+            env_value = os.environ.get(env_key)
             if env_value is not None:
-                if field == "total_hours":
-                    values[field] = int(env_value)
+                if field in ["temperature"]:
+                    values[field] = float(env_value)
                 else:
                     values[field] = env_value
                     
         return cls(**values)
     
-    def to_dict(self) -> dict:
-        """转换为字典格式"""
+    def get_llm_config(self) -> dict:
+        """获取LLM配置"""
         return {
-            "pdf_path": self.pdf_path,
-            "total_hours": self.total_hours,
-            "grade": self.grade,
-            "subject": self.subject
+            "model_name": self.model_name,
+            "temperature": self.temperature,
+            "api_key": self.api_key
         }
     
     def print_config(self) -> None:
         """打印配置信息"""
-        print(f"\n=== 配置信息 ===")
-        print(f"教材文件：{self.pdf_path}")
-        print(f"总课时：{self.total_hours}")
-        print(f"年级：{self.grade}")
-        print(f"学科：{self.subject}") 
+        print(f"\n=== LLM配置信息 ===")
+        print(f"模型：{self.model_name}")
+        print(f"温度：{self.temperature}") 

@@ -1,14 +1,14 @@
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Union
 import json
 from datetime import datetime
 from .output_formatter import (
     format_meta_info,
     format_objectives,
-    format_core_literacy,
     format_knowledge_points,
     format_activities,
-    format_assessment
+    format_assessment,
+    format_markdown
 )
 
 def load_json(file_path: str) -> Dict[str, Any]:
@@ -45,12 +45,13 @@ def save_markdown(content: str, file_path: str) -> None:
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(content)
 
-def save_lesson_plan_to_md(data: Dict[str, Any], course_name: str) -> None:
-    """将教学大纲保存为Markdown和JSON文件
+def save_lesson_plan_to_md(data: Union[Dict[str, Any], str], course_name: str, textbook_name: str = "") -> None:
+    """将教学大纲保存为Markdown文件
     
     Args:
-        data: 教学大纲数据
+        data: 教学大纲数据，可以是字典或字符串
         course_name: 课程名称
+        textbook_name: 教材名称
     """
     try:
         # 创建输出目录
@@ -59,52 +60,20 @@ def save_lesson_plan_to_md(data: Dict[str, Any], course_name: str) -> None:
         
         # 生成文件名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = f"{course_name}_教学大纲_{timestamp}"
-        json_path = os.path.join(output_dir, f"{base_name}.json")
-        md_path = os.path.join(output_dir, f"{base_name}.md")
+        # 如果有教材名称，添加到文件名中
+        if textbook_name:
+            md_path = os.path.join(output_dir, f"{course_name}_{textbook_name}_教学大纲_{timestamp}.md")
+        else:
+            md_path = os.path.join(output_dir, f"{course_name}_教学大纲_{timestamp}.md")
         
-        # 保存JSON文件
-        save_json(data, json_path)
-        print(f"JSON文件已保存: {json_path}")
-        
-        # 生成Markdown内容
-        md_content = []
-        
-        # 添加标题
-        md_content.append(f"# {course_name}教学大纲\n")
-        
-        # 添加基本信息
-        md_content.append("## 一、基本信息\n")
-        meta_info = data.get("meta_info", {})
-        md_content.append(format_meta_info(meta_info))
-        
-        # 添加教学目标
-        md_content.append("## 二、教学目标\n")
-        objectives = data.get("teaching_objectives", {})
-        md_content.append(format_objectives(objectives))
-        
-        # 添加核心素养
-        md_content.append("## 三、核心素养\n")
-        literacy = data.get("core_literacy", [])
-        md_content.append(format_core_literacy(literacy))
-        
-        # 添加知识点
-        md_content.append("## 四、知识点\n")
-        knowledge = data.get("knowledge_points", {})
-        md_content.append(format_knowledge_points(knowledge))
-        
-        # 添加教学活动
-        md_content.append("## 五、教学活动\n")
-        activities = data.get("teaching_activities", {})
-        md_content.append(format_activities(activities))
-        
-        # 添加评估方案
-        md_content.append("## 六、评估方案\n")
-        assessment = data.get("assessment_plan", {})
-        md_content.append(format_assessment(assessment))
+        # 如果输入是字符串，直接使用；否则使用format_markdown生成内容
+        if isinstance(data, str):
+            md_content = data
+        else:
+            md_content = format_markdown(data, course_name)
         
         # 保存Markdown文件
-        save_markdown("\n".join(md_content), md_path)
+        save_markdown(md_content, md_path)
         print(f"Markdown文件已保存: {md_path}")
         
     except Exception as e:

@@ -223,47 +223,41 @@ class TeachingAgent:
             print("\n=== 保存输出 ===")
             
             # 确保所有必要的状态都存在
-            required_fields = ["textbook_content", "objectives", "knowledge_points", "activities", "assessment", "total_hours", "grade", "subject"]
+            required_fields = ["objectives", "knowledge_points", "activities", "assessment", "grade", "subject"]
             for field in required_fields:
                 if field not in state or not state[field]:
                     raise ValueError(f"缺少必要的状态字段: {field}")
             
-            # 获取课程名称
-            course_name = state["textbook_content"][-1].get("title", "未命名课程")
+            # 获取课程名称和教材名称
+            subject = state["subject"][-1]
+            textbook_content = state["textbook_content"][-1] if state["textbook_content"] else {}
+            textbook_name = textbook_content.get("title", "").replace(".pdf", "")  # 从PDF文件名中提取教材名称
             
-            # 准备输出内容
-            output = {
-                "meta_info": {
-                    "grade": state["grade"][-1],
-                    "subject": state["subject"][-1],
-                    "total_hours": state["total_hours"][-1],
-                    "textbook_title": course_name
-                },
-                "teaching_objectives": state["objectives"][-1].get("objectives", {}),
-                "core_literacy": state["objectives"][-1].get("core_literacy", []),
-                "knowledge_points": state["knowledge_points"][-1],
-                "teaching_activities": {
-                    "activities": state["activities"][-1].get("activities", []),
-                    "time_allocation": state["activities"][-1].get("time_allocation", {})
-                },
-                "assessment_plan": {
-                    "formative": state["assessment"][-1].get("assessment_plan", {}).get("formative", []),
-                    "summative": state["assessment"][-1].get("assessment_plan", {}).get("summative", []),
-                    "weight": state["assessment"][-1].get("assessment_plan", {}).get("weight", {}),
-                    "feedback_methods": state["assessment"][-1].get("feedback_methods", [])
-                }
-            }
+            # 合并所有输出内容
+            output = f"""# {subject}教学大纲
+
+## 一、教学目标
+{state["objectives"][-1]}
+
+## 二、知识点分析
+{state["knowledge_points"][-1]}
+
+## 三、教学活动
+{state["activities"][-1]}
+
+## 四、评估方案
+{state["assessment"][-1]}
+"""
             
             # 保存到文件
-            save_lesson_plan_to_md(output, course_name)
+            save_lesson_plan_to_md(output, subject, textbook_name)
+            
             return {
                 "messages": ["教学大纲已保存"],
-                "textbook_content": [state["textbook_content"][-1]],
                 "objectives": [state["objectives"][-1]],
                 "knowledge_points": [state["knowledge_points"][-1]],
                 "activities": [state["activities"][-1]],
                 "assessment": [state["assessment"][-1]],
-                "total_hours": [state["total_hours"][-1]],
                 "grade": [state["grade"][-1]],
                 "subject": [state["subject"][-1]]
             }

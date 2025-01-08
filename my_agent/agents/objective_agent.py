@@ -1,190 +1,145 @@
 from typing import Dict, Any, List, Optional
 from my_agent.config import get_llm
 from my_agent.utils.exceptions import LLMGenerationError
+from my_agent.utils.pdf_utils import extract_toc_content
 import json
 
-def extract_toc_content(content: Dict[str, Any]) -> str:
-    """从教材内容中提取目录部分
-    
-    Args:
-        content: 教材内容字典
-        
-    Returns:
-        str: 目录内容
-    """
+def design_objectives(content: str, total_hours: int, grade: str, subject: str) -> str:
+    """基于目录设计教学目标"""
     try:
-        if not content or not isinstance(content, dict):
-            return ""
-            
-        chapters = content.get("chapters", [])
-        if not chapters:
-            return ""
-            
-        # 只检查前10页
-        max_pages = min(10, len(chapters))
-        
-        # 目录的常见标识
-        toc_indicators = [
-            "目录",
-            "contents",
-            "table of contents"
-        ]
-        
-        # 提取目录内容
-        toc_content = []
-        in_toc = False
-        
-        for chapter in chapters[:max_pages]:
-            text = chapter.get("content", "").lower()  # 转换为小写以便比较
-            
-            # 检查是否进入目录部分
-            if not in_toc:
-                for indicator in toc_indicators:
-                    if indicator in text:
-                        in_toc = True
-                        toc_content.append(chapter.get("content", ""))  # 保留原始文本
-                        break
-            else:
-                # 检查是否已经离开目录部分（通过检测是否出现正文、前言等标识）
-                if any(x in text for x in ["第一章", "前言", "绪论", "正文", "第一单元", "第一节", "第一课"]):
-                    break
-                toc_content.append(chapter.get("content", ""))  # 保留原始文本
-                
-        return "\n".join(toc_content)
-        
-    except Exception as e:
-        print(f"提取目录内容失败: {str(e)}")
-        return ""
-
-def design_objectives(content: str, total_hours: int, grade: str = "7年级", subject: str = "语文") -> Dict[str, Any]:
-    """设计教学目标
-    
-    Args:
-        content: 教材内容的JSON字符串
-        total_hours: 总课时数
-        grade: 年级，默认为7年级
-        subject: 学科，默认为语文
-    """
-    try:
-        # 验证输入
-        if not content:
-            raise ValueError("内容为空")
-            
-        if not isinstance(total_hours, (int, float)) or total_hours <= 0:
-            raise ValueError(f"总课时格式错误: {total_hours}")
-            
+        # 将字符串解析为字典
         try:
-            # 解析内容为字典
             content_dict = json.loads(content)
         except json.JSONDecodeError as e:
-            raise ValueError(f"JSON解析失败: {str(e)}")
-            
+            print(f"JSON解析失败: {e}")
+            return generate_objectives(content, total_hours, grade, subject)
+        
         # 提取目录内容
         toc_content = extract_toc_content(content_dict)
         if not toc_content:
-            raise ValueError("未找到有效的目录内容")
+            print("未找到目录内容，将使用generate_objectives方法...")
+            return generate_objectives(content, total_hours, grade, subject)
             
-        # print(f"提取的目录内容:\n{toc_content[:1000]}...")  # 打印前200个字符用于调试
+        print(f"成功提取目录内容，长度：{len(toc_content)}")
+        
+        # 计算单元数量
+        import re
+        unit_count = 0
+        chapter_count = 0
+        units = []  # 存储单元名称
+        
+        for line in toc_content.split('\n'):
+            # 匹配单元标题
+            unit_match = re.search(r'第[一二三四五六七八九十\d]+单元[^，。；]*', line)
+            if unit_match:
+                unit_count += 1
+                units.append(unit_match.group())
+            # 如果没有单元，匹配章节
+            elif re.search(r'第[一二三四五六七八九十\d]+章', line):
+                chapter_count += 1
+        
+        # 如果没有找到单元，使用章节作为单元
+        if unit_count == 0:
+            unit_count = chapter_count
+            print(f"未找到单元，使用章节数：{chapter_count}")
             
+        if unit_count == 0:
+            print("未找到单元或章节数量，将使用默认值")
+            unit_count = 6  # 默认值
+            
+        print(f"检测到单元数量：{unit_count}")
+        if units:
+            print("单元列表：")
+            for unit in units:
+                print(f"  - {unit}")
+        
+        # 根据单元数调整目标数量，尽量保持一个单元一个目标
+        knowledge_goals = unit_count  # 知识目标与单元一一对应
+        process_goals = (unit_count + 1) // 2  # 每两个单元对应一个过程目标（向上取整）
+        attitude_goals = (unit_count + 1) // 2  # 每两个单元对应一个态度目标（向上取整）
+        competency_goals = (unit_count + 1) // 2  # 每两个单元对应一个核心素养目标（向上取整）
+        
         # 获取LLM配置
         llm_config = get_llm()
         
-        # 构建提示词
-        prompt = f"""作为一名资深的{subject}教师，请基于以下教材目录为{grade}学生设计教学目标。总课时为{total_hours}学时。
-
-教材目录：
-{toc_content}
-
-请根据目录结构和内容，结合{subject}学科特点和{grade}学生的认知特点，设计以下几个方面的教学目标：
-1. 知识与技能目标：基于目录反映的知识体系，设计学生应该掌握的具体知识和技能
-2. 过程与方法目标：根据内容层次，设计学生应该掌握的学习方法和思维方式
-3. 情感态度与价值观目标：结合课程主题，设计学生应该形成的情感态度和价值观
-
-要求：
-1. 目标要符合{grade}学生的认知水平和学习特点
-2. 目标要体现{subject}学科的核心素养要求
-3. 每个目标要具体、可测量、可达成
-4. 要考虑{total_hours}课时的时间安排
-
-请按以下格式输出：
-{{
-    "objectives": {{
-        "knowledge_skill": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ],
-        "process_method": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ],
-        "emotion_attitude": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ]
-    }},
-    "core_literacy": [
-        {{
-            "name": "素养名称",
-            "description": "具体描述",
-            "related_objectives": ["相关目标1", "相关目标2"]
-        }}
-    ]
-}}"""
-
-        print("\n=== 生成教学目标 ===")
-        print(f"目录内容长度: {len(toc_content)}")
-        print(f"年级: {grade}")
-        print(f"学科: {subject}")
-        print("调用LLM生成目标...")
+        # 构建单元目标提示
+        unit_goals_prompt = ""
+        if units:
+            unit_goals_prompt = "\n单元目标要求：\n"
+            for i, unit in enumerate(units, 1):
+                unit_goals_prompt += f"{i}. {unit}的教学目标应该体现该单元的特点和重点\n"
         
-        # 调用LLM
+        prompt = f"""作为一名资深的{subject}教师，请基于教材目录设计总课时为{total_hours}课时的教学目标体系。
+
+请首先分析目录中的以下要素：
+1. 教材的整体编排思路（各单元主题、内容类型、难度分布）
+2. 教学内容的时间分配（考虑{total_hours}课时的合理分配）
+3. {subject}学科的能力要求（符合{grade}学生特点）
+4. 核心素养的培养路径（结合{subject}学科特点）
+{unit_goals_prompt}
+然后基于以上分析，设计教学目标。要求：
+1. 输出采用markdown格式，结构清晰，层次分明，全部使用中文
+2. 目标体系应包含以下部分：
+
+### 知识与技能目标
+
+[此处列出{knowledge_goals}个具体目标（每个单元对应一个目标），每个目标包含：
+- **目标描述**：具体说明学生应该掌握的知识和技能
+- **重要程度**：高/中/低
+- **对应单元**：该目标对应的具体单元
+- **课时安排**：完成该目标需要的课时数
+- **评价标准**：2-3个具体的评估标准]
+
+### 过程与方法目标
+
+[此处列出{process_goals}个具体目标（每2个单元对应一个目标），每个目标包含：
+- **目标描述**：具体说明要培养的学习方法和思维能力
+- **重要程度**：高/中/低
+- **实现途径**：通过哪些单元内容实现
+- **课时安排**：相关活动的课时分配
+- **评价标准**：2-3个具体的评估标准]
+
+### 情感态度与价值观目标
+
+[此处列出{attitude_goals}个具体目标（每2个单元对应一个目标），每个目标包含：
+- **目标描述**：具体说明要培养的情感态度和价值取向
+- **重要程度**：高/中/低
+- **培养载体**：通过哪些单元内容培养
+- **渗透方式**：在教学过程中如何渗透
+- **评价标准**：2-3个具体的评估标准]
+
+### 核心素养
+
+[此处列出{competency_goals}个核心素养（每2个单元对应一个素养），每个素养包含：
+- **素养描述**：该素养的具体内容
+- **对应单元**：该素养在哪些单元中培养
+- **实现路径**：如何通过教学活动培养该素养
+- **课时分配**：在总课时中的分配比例]
+
+注意事项：
+1. 目标设计要与课时安排相匹配，确保在{total_hours}课时内可以完成
+2. 目标要符合{grade}学生的认知水平和{subject}学科特点
+3. 目标之间要体现递进关系和内在联系
+4. 评价标准要具体、可测量、可操作
+5. 各类目标的课时分配要合理，确保总和为{total_hours}课时
+
+教材目录如下：
+{toc_content}
+"""
+        
+        print("\n=== 基于目录设计教学目标 ===")
+        print("调用LLM设计目标...")
+        
         response = llm_config.client.chat.completions.create(
             model=llm_config.model,
             messages=[
-                {"role": "system", "content": f"你是一个专业的{subject}教师，擅长基于教材目录设计整体教学目标。你的设计要符合新课标要求，体现{subject}学科特点和{grade}学生特点。"},
+                {"role": "system", "content": f"你是一个专业的{subject}教师，擅长设计教学目标。你的设计要符合新课标要求，体现{subject}学科特点和{grade}学生特点。"},
                 {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            response_format={"type": "json_object"}
+            ]
         )
         
-        # 解析响应
-        try:
-            result = response.choices[0].message.content
-            if isinstance(result, str):
-                result = json.loads(result)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"LLM响应JSON解析失败: {str(e)}")
-            
-        # 验证结果
-        if not isinstance(result, dict):
-            raise ValueError(f"结果格式错误: {type(result)}")
-            
-        if "objectives" not in result:
-            raise ValueError("缺少objectives字段")
-            
-        objectives = result["objectives"]
-        if not isinstance(objectives, dict):
-            raise ValueError(f"objectives格式错误: {type(objectives)}")
-            
-        for key in ["knowledge_skill", "process_method", "emotion_attitude"]:
-            if key not in objectives:
-                raise ValueError(f"缺少{key}目标")
-            if not isinstance(objectives[key], list):
-                raise ValueError(f"{key}目标必须是列表")
-            if not objectives[key]:
-                raise ValueError(f"{key}目标不能为空")
-                
-        print("目标生成完成")
+        result = response.choices[0].message.content
+        print("目标设计完成")
         return result
         
     except Exception as e:
@@ -202,188 +157,103 @@ def validate_objectives(objectives: Dict[str, Any]) -> None:
         ValueError: 如果格式或内容不符合要求
     """
     # 检查基本结构
-    if not isinstance(objectives, dict):
-        raise ValueError("教学目标必须是字典类型")
+    if not isinstance(objectives, str):
+        raise ValueError("教学目标必须是字符串类型")
         
-    if "objectives" not in objectives:
-        raise ValueError("缺少objectives字段")
-        
-    # 检查教学目标
-    obj = objectives["objectives"]
-    for key in ["knowledge_skill", "process_method", "emotion_attitude"]:
-        if key not in obj:
-            raise ValueError(f"教学目标缺少{key}字段")
-        if not isinstance(obj[key], list):
-            raise ValueError(f"{key}必须是列表类型")
-        if not obj[key]:
-            raise ValueError(f"{key}不能为空")
+    # 检查必要的章节标题
+    required_sections = [
+        "一、知识与技能目标",
+        "二、过程与方法目标",
+        "三、情感态度与价值观目标",
+        "四、核心素养"
+    ]
+    
+    for section in required_sections:
+        if section not in objectives:
+            raise ValueError(f"教学目标缺少{section}章节")
             
-    # 检查核心素养
-    if "core_literacy" not in objectives:
-        raise ValueError("缺少core_literacy字段")
-    if not isinstance(objectives["core_literacy"], list):
-        raise ValueError("core_literacy必须是列表类型")
-    if not objectives["core_literacy"]:
-        raise ValueError("core_literacy不能为空")
+    # 检查内容长度
+    if len(objectives) < 500:  # 假设至少需要500字的详细描述
+        raise ValueError("教学目标内容过短，请提供更详细的描述")
 
-def generate_objectives(content: Optional[Dict[str, Any]], grade: str = "7年级", subject: str = "语文") -> Dict[str, Any]:
-    """生成教学目标"""
+def generate_objectives(content: Dict[str, Any], total_hours: int, grade: str, subject: str) -> str:
+    """根据教材内容生成教学目标"""
     try:
-        # 获取LLM配置
         llm_config = get_llm()
         
-        # 构建提示词
-        if content:
-            content_json = json.dumps(content, indent=2, ensure_ascii=False)
-            template = """作为一名资深的{subject}教师，请基于以下教材内容为{grade}学生生成教学目标。
+        prompt = f"""作为一名资深的{subject}教师，请基于教材内容设计总课时为{total_hours}课时的教学目标体系。
 
-教材内容：
+请首先分析教材内容的以下要素：
+1. 教材的知识点分布（重点、难点、基础点）
+2. 教学内容的时间需求（考虑{total_hours}课时的合理分配）
+3. {subject}学科的能力培养（符合{grade}学生特点）
+4. 学习难度的递进关系（适应{grade}学生认知规律）
+
+然后基于以上分析，设计教学目标。要求：
+1. 输出采用markdown格式，结构清晰，层次分明，全部使用中文
+2. 目标体系应包含以下部分：
+
+### 知识与技能目标
+
+[此处结合教材内容和{total_hours}课时安排，列出5-6个具体目标，每个目标包含：
+- **目标描述**：具体说明学生应该掌握的知识和技能
+- **重要程度**：高/中/低
+- **对应内容**：该目标对应的具体教材内容
+- **课时安排**：完成该目标需要的课时数
+- **评价标准**：2-3个具体的评估标准]
+
+### 过程与方法目标
+
+[此处结合{subject}学科特点，列出3-4个具体目标，每个目标包含：
+- **目标描述**：具体说明要培养的学习方法和思维能力
+- **重要程度**：高/中/低
+- **实现途径**：通过哪些教学内容实现
+- **课时安排**：相关活动的课时分配
+- **评价标准**：2-3个具体的评估标准]
+
+### 情感态度与价值观目标
+
+[此处结合{grade}学生特点，列出3-4个具体目标，每个目标包含：
+- **目标描述**：具体说明要培养的情感态度和价值取向
+- **重要程度**：高/中/低
+- **培养载体**：通过哪些教学内容培养
+- **渗透方式**：在教学过程中如何渗透
+- **评价标准**：2-3个具体的评估标准]
+
+### 核心素养
+
+[此处结合{subject}学科核心素养，列出4个核心素养，每个素养包含：
+- **素养描述**：该素养的具体内容
+- **培养内容**：通过哪些教材内容培养
+- **实现路径**：如何通过教学活动培养该素养
+- **课时分配**：在总课时中的分配比例]
+
+注意事项：
+1. 目标设计要与课时安排相匹配，确保在{total_hours}课时内可以完成
+2. 目标要符合{grade}学生的认知水平和{subject}学科特点
+3. 目标之间要体现递进关系和内在联系
+4. 评价标准要具体、可测量、可操作
+5. 各类目标的课时分配要合理，确保总和为{total_hours}课时
+
+教材内容如下：
 {content}
-
-请设计完整的教学目标，要求：
-1. 目标要全面覆盖教材内容
-2. 目标要分为三个维度：
-   - 知识与技能目标
-   - 过程与方法目标
-   - 情感态度与价值观目标
-3. 每个目标要：
-   - 具体明确
-   - 可测量
-   - 可达成
-   - 符合{grade}学生认知水平
-   - 有时间限制
-4. 目标设计要：
-   - 符合{subject}学科特点
-   - 体现核心素养
-   - 注重能力培养
-   - 关注学生发展
-   - 突出应用实践
-   - 重视情感熏陶
-
-请按以下格式输出：
-{{
-    "objectives": {{
-        "knowledge_skill": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ],
-        "process_method": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ],
-        "emotion_attitude": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ]
-    }},
-    "core_literacy": [
-        {{
-            "name": "素养名称",
-            "description": "具体描述",
-            "related_objectives": ["相关目标1", "相关目标2"]
-        }}
-    ]
-}}"""
-        else:
-            template = """作为一名资深的{subject}教师，请设计一个单元的教学目标。
-
-请设计完整的教学目标，要求：
-1. 目标要分为三个维度：
-   - 知识与技能目标
-   - 过程与方法目标
-   - 情感态度与价值观目标
-2. 每个目标要：
-   - 具体明确
-   - 可测量
-   - 可达成
-   - 符合{grade}学生认知水平
-   - 有时间限制
-3. 目标设计要：
-   - 符合{subject}学科特点
-   - 体现核心素养
-   - 注重能力培养
-   - 关注学生发展
-   - 突出应用实践
-   - 重视情感熏陶
-
-请按以下格式输出：
-{{
-    "objectives": {{
-        "knowledge_skill": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ],
-        "process_method": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ],
-        "emotion_attitude": [
-            {{
-                "content": "目标内容",
-                "importance": "重要程度",
-                "evaluation_criteria": ["评价标准1", "评价标准2"]
-            }}
-        ]
-    }},
-    "core_literacy": [
-        {{
-            "name": "素养名称",
-            "description": "具体描述",
-            "related_objectives": ["相关目标1", "相关目标2"]
-        }}
-    ]
-}}"""
-
-        prompt = template.format(
-            content=content_json if content else "",
-            grade=grade,
-            subject=subject
-        )
-
-        print("\n=== 生成教学目标 ===")
-        print("调用LLM生成教学目标...")
+"""
         
-        # 调用LLM
+        print("\n=== 根据内容生成教学目标 ===")
+        print("调用LLM生成目标...")
+        
         response = llm_config.client.chat.completions.create(
             model=llm_config.model,
             messages=[
-                {"role": "system", "content": f"你是一个专业的{subject}教师，擅长设计教学目标。你的设计要符合新课标要求，体现学科特点。"},
+                {"role": "system", "content": f"你是一个专业的{subject}教师，擅长设计教学目标。你的设计要符合新课标要求，体现{subject}学科特点和{grade}学生特点。"},
                 {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            response_format={"type": "json_object"}
+            ]
         )
         
-        # 解析响应
         result = response.choices[0].message.content
-        if isinstance(result, str):
-            result = json.loads(result)
-            
-        print("教学目标生成完成")
+        print("目标生成完成")
         return result
         
     except Exception as e:
         print(f"错误：生成教学目标失败 - {str(e)}")
-        return {
-            "objectives": {
-                "knowledge_skill": [],
-                "process_method": [],
-                "emotion_attitude": []
-            },
-            "core_literacy": []
-        } 
+        raise ValueError(f"生成教学目标失败: {str(e)}") 

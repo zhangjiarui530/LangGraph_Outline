@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import os
-from dotenv import load_dotenv
+from zhipuai import ZhipuAI
 
-load_dotenv()
+if TYPE_CHECKING:
+    from my_agent.utils.configuration import Configuration
 
 @dataclass
 class LLMConfig:
@@ -12,19 +13,24 @@ class LLMConfig:
     client: any
     temperature: float = 0.2
     
-def get_llm() -> LLMConfig:
+def get_llm(config: Optional["Configuration"] = None) -> LLMConfig:
     """
     获取模型配置
     
+    Args:
+        config: 可选的配置对象，如果不提供则使用默认配置
+        
     Returns:
         LLMConfig: 模型配置
     """
-    from zhipuai import ZhipuAI
-    client = ZhipuAI(api_key=os.getenv("ZHIPU_API_KEY"))
+    if config is None:
+        from my_agent.utils.configuration import Configuration
+        config = Configuration()
+        
+    client = ZhipuAI(api_key=config.api_key)
     
-    # 统一使用glm-4-air
     return LLMConfig(
-        model="glm-4-air",
+        model=config.model_name,
         client=client,
-        temperature=0.2
+        temperature=config.temperature
     )
