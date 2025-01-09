@@ -1,162 +1,116 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from my_agent.config import get_llm
 from my_agent.utils.exceptions import LLMGenerationError
+from pydantic import BaseModel
 import json
 
-def analyze_knowledge(content: Dict[str, Any], objectives: Dict[str, Any], grade: str, subject: str) -> str:
-    """分析知识点"""
-    prompt = f"""作为一名资深的{subject}教师，请基于教材内容和教学目标进行知识点分析。
+# 定义结构化输出模型
+class KnowledgePoint(BaseModel):
+    """知识点结构"""
+    content: str
 
-请首先仔细阅读教材内容和教学目标，分析以下要素：
-1. 教材内容的知识体系结构
-2. 教学目标对应的知识要求
-3. 知识点之间的内在联系
-4. 重难点的分布特点
+def get_point_config(point_type: str) -> Dict[str, Any]:
+    """获取知识点类型的配置"""
+    return {
+        "basic": {
+            "title": "基础知识点",
+            "count": "6-10个",
+            "difficulty": "简单/中等/困难",
+            "importance": "核心/重要/一般",
+            "suggestion_name": "教学建议"
+        },
+        "key": {
+            "title": "重点知识点",
+            "count": "4-6个",
+            "difficulty": "中等/困难",
+            "importance": "核心/重要",
+            "suggestion_name": "教学建议"
+        },
+        "difficult": {
+            "title": "难点知识点",
+            "count": "3-4个",
+            "difficulty": "困难",
+            "importance": "核心/重要",
+            "suggestion_name": "突破建议"
+        }
+    }[point_type]
 
-然后基于以上分析，进行知识点分析。要求：
-1. 输出采用markdown格式，结构清晰，层次分明，全部使用中文
-2. 分析应包含以下部分：
-
-### 基础知识点
-
-[此处结合教材内容和教学目标，列出6-8个基础知识点，每个知识点包含：
-- **知识内容**：具体说明知识点的内容和范围，要与教材内容直接对应
-- **所在章节**：该知识点在教材中的具体位置
-- **难度**：简单/中等/困难
-- **重要程度**：核心/重要/一般
-- **前置知识**：需要的前置知识列表，注明这些知识在教材中的位置
-- **教学建议**：结合教材内容的具体教学建议和方法]
-
-### 重点知识点
-
-[此处结合教材重点内容和核心目标，列出4-5个重点知识点，每个知识点包含：
-- **知识内容**：具体说明知识点的内容和范围，要与教材重点内容对应
-- **所在章节**：该知识点在教材中的具体位置
-- **难度**：中等/困难
-- **重要程度**：核心/重要
-- **前置知识**：需要的前置知识列表，注明这些知识在教材中的位置
-- **教学建议**：针对重点内容的具体教学建议和方法]
-
-### 难点知识点
-
-[此处结合教材难点内容和学生特点，列出3-4个难点知识点，每个知识点包含：
-- **知识内容**：具体说明知识点的内容和范围，要与教材难点内容对应
-- **所在章节**：该知识点在教材中的具体位置
-- **难度**：困难
-- **重要程度**：核心/重要
-- **前置知识**：需要的前置知识列表，注明这些知识在教材中的位置
-- **突破建议**：针对难点内容的具体突破方法和建议]
-
-### 拓展知识点
-
-[此处结合教材拓展内容和发展目标，列出2-3个拓展知识点，每个知识点包含：
-- **知识内容**：具体说明知识点的内容和范围，要与教材拓展内容对应
-- **所在章节**：该知识点在教材中的具体位置
-- **难度**：中等/困难
-- **重要程度**：一般
-- **前置知识**：需要的前置知识列表，注明这些知识在教材中的位置
-- **拓展建议**：如何基于教材内容引导学生进行拓展学习]
-
-注意事项：
-1. 知识点要与教材内容和教学目标直接对应
-2. 知识点分析要体现教材的重点和难点
-3. 知识点之间要体现内在联系和递进关系
-4. 所有知识点要符合{grade}学生的认知水平
-5. 教学建议要结合教材内容，具体、可操作
-
-教材内容和教学目标如下：
-{objectives}
-{content}
-"""
-
+def analyze_point_type(content: Dict[str, Any], objectives: Dict[str, Any], grade: str, subject: str, point_type: str) -> Dict[str, Any]:
+    """分析单个类型的知识点"""
     try:
-        # 获取LLM配置
         llm_config = get_llm()
+        config = get_point_config(point_type)
         
-        print("\n=== 分析知识点 ===")
-        print("调用LLM分析知识点...")
+        # 获取目录内容和单元信息
+        toc_content = content.get("toc_content", "")
+        units = content.get("units", [])
+        textbook_content = content.get("textbook_content", {})
         
-        # 调用LLM
+        # 如果没有目录内容，使用完整内容
+        if not toc_content:
+            print("未找到目录内容，将使用完整内容进行分析...")
+            toc_content = json.dumps(textbook_content, ensure_ascii=False, indent=2)
+        
+        # 构建单元知识点提示
+        unit_points_prompt = ""
+        if units:
+            unit_points_prompt = "\n单元知识点要求：\n"
+            for i, unit in enumerate(units, 1):
+                unit_points_prompt += f"{i}. {unit}的知识点应该体现该单元的特点和重点\n"
+        
+        prompt = f"""作为一名资深的{subject}教师，请分析教材的{config['title']}。
+
+分析步骤：
+1. 通读教材目录和教学目标，理解整体知识体系
+2. 根据教材特点，识别{config['title']}的分布规律
+3. 结合教学目标和学生认知特点，筛选合适的知识点
+4. 按照知识体系的内在逻辑组织知识点
+
+请列出{config['count']}{config['title']}。要求：
+1. 知识点要覆盖教材主要章节，体现知识体系的完整性
+2. 每个知识点包含以下要素：
+   - 知识内容：具体说明知识点的内容和范围
+   - 所在章节：看情况具体到章节
+   - 难度：{config['difficulty']}中选一个
+   - 重要程度：{config['importance']}中选一个
+   - 前置知识：列出必要的前置知识，注明对应章节
+   - {config['suggestion_name']}：1-2点具体建议
+3. 知识点数量要严格控制在{config['count']}
+
+格式示例：
+1. 直角三角形的定义与性质
+   章节：第二章第1节
+   难度：中等
+   重要程度：核心
+   前置知识：平面图形基础知识（第一章）、角的概念（第一章第2节）
+   教学建议：
+   - 通过实物演示理解直角特征
+   - 用折纸活动体验直角三角形的性质
+
+注意：
+1. 知识点要体现教材的整体性和系统性，避免仅关注前几章
+2. 知识点之间要体现内在联系和递进关系
+3. 知识点要符合{grade}学生的认知水平
+4. 建议要具体、可操作，避免空泛
+
+{unit_points_prompt}
+
+教材目录和教学目标如下：
+{objectives}
+{toc_content}
+"""
+        
         response = llm_config.client.chat.completions.create(
             model=llm_config.model,
             messages=[
-                {"role": "system", "content": f"你是一个专业的{subject}教师，擅长分析教材知识点。你的分析要符合新课标要求，体现{subject}学科特点，适合{grade}学生的认知水平。"},
+                {"role": "system", "content": f"你是一个专业的{subject}教师，擅长分析教材{config['title']}。请从整体角度分析教材，确保知识点覆盖全面，体系完整。输出格式要简约、清晰、层次分明。"},
                 {"role": "user", "content": prompt}
             ]
         )
         
-        # 获取响应
         result = response.choices[0].message.content
-        print("知识点分析完成")
-        return result
+        return {f"{point_type}_points": [{"content": result}]}
         
     except Exception as e:
-        print(f"错误：分析知识点失败 - {str(e)}")
-        return {
-            "knowledge_points": {
-                "basic": [
-                    {
-                        "name": "基础知识点",
-                        "content": "暂无内容",
-                        "difficulty": "中等",
-                        "importance": "核心",
-                        "prerequisites": [],
-                        "objectives": [],
-                        "teaching_suggestions": "暂无建议"
-                    }
-                ],
-                "advanced": [
-                    {
-                        "name": "拓展知识点",
-                        "content": "暂无内容",
-                        "difficulty": "困难",
-                        "importance": "重要",
-                        "prerequisites": [],
-                        "objectives": [],
-                        "teaching_suggestions": "暂无建议"
-                    }
-                ],
-                "key_points": ["暂无重点"],
-                "difficult_points": ["暂无难点"]
-            }
-        }
-
-def validate_knowledge_points(knowledge: Dict[str, Any]) -> None:
-    """
-    验证知识点分析的格式和内容
-    
-    Args:
-        knowledge: 知识点分析字典
-        
-    Raises:
-        ValueError: 如果格式或内容不符合要求
-    """
-    # 检查基本结构
-    if not isinstance(knowledge, dict):
-        raise ValueError("知识点分析必须是字典类型")
-        
-    if "knowledge_points" not in knowledge:
-        raise ValueError("缺少knowledge_points字段")
-        
-    if "relations" not in knowledge:
-        raise ValueError("缺少relations字段")
-        
-    # 检查知识点
-    kp = knowledge["knowledge_points"]
-    for key in ["basic", "important", "advanced"]:
-        if key not in kp:
-            raise ValueError(f"知识点缺少{key}字段")
-        if not isinstance(kp[key], list):
-            raise ValueError(f"{key}必须是列表类型")
-        if not kp[key]:
-            raise ValueError(f"{key}不能为空")
-            
-    # 检查关系
-    rel = knowledge["relations"]
-    for key in ["prerequisites", "connections", "extensions"]:
-        if key not in rel:
-            raise ValueError(f"关系缺少{key}字段")
-        if not isinstance(rel[key], list):
-            raise ValueError(f"{key}必须是列表类型")
-        if not rel[key]:
-            raise ValueError(f"{key}不能为空")
+        print(f"错误：{config['title']}分析失败 - {str(e)}")
+        return {f"{point_type}_points": []}
