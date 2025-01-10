@@ -12,7 +12,7 @@ from my_agent.agents.objective_agent import generate_objectives, design_objectiv
 from my_agent.agents.knowledge_agent import analyze_point_type, get_point_config
 from my_agent.agents.activity_agent import design_activities
 from my_agent.agents.assessment_agent import create_assessment
-from my_agent.utils.pdf_utils import extract_text_from_pdf, is_valid_pdf, has_table_of_contents, extract_toc_content
+from my_agent.utils.pdf_utils import extract_text_from_pdf, is_valid_pdf
 from my_agent.utils.file_utils import save_lesson_plan_to_md
 from my_agent.utils.exceptions import PDFExtractionError, LLMGenerationError
 
@@ -82,95 +82,36 @@ class TeachingAgent:
         
     def process_textbook(self, state: TeachingState) -> TeachingState:
         """处理教材内容"""
-        start_time = time.time()
         try:
-            print("\n=== 处理教材内容 ===")
-            
-            # 验证总课时
-            total_hours = state["total_hours"][-1] if state["total_hours"] else 0
-            if not isinstance(total_hours, int) or total_hours <= 0:
-                raise ValueError(f"总课时格式错误: {total_hours}")
-                
-            if total_hours % 4 != 0:
-                raise ValueError(f"总课时必须是4的倍数: {total_hours}")
-                
-            # 提取教材内容
+            # 获取参数
             textbook_content = state["textbook_content"][-1] if state["textbook_content"] else {}
-            if not isinstance(textbook_content, dict):
-                raise ValueError(f"教材内容格式错误: {type(textbook_content)}")
-                
-            # 检查是否为纯图片版本
-            if textbook_content.get("chapters"):
-                total_text = "".join(chapter.get("content", "") for chapter in textbook_content["chapters"])
-                if len(total_text.strip()) < 100:  # 如果提取的文本内容太少，认为是纯图片版本
-                    return {
-                        "messages": ["检测到纯图片版本的教材，处理终止"],
-                        "textbook_content": [textbook_content],
-                        "total_hours": [total_hours],
-                        "next": ["END"]  # 直接结束处理
-                    }
-
-            # 检查是否包含目录
-            print("检查教材是否包含目录...")
-            has_toc = has_table_of_contents(textbook_content)
-            print(f"目录检查结果：{'包含目录' if has_toc else '未包含目录'}")
-
-            # 提取目录内容
-            print("正在提取目录内容...")
-            toc_content = extract_toc_content(textbook_content) if has_toc else ""
-            if not toc_content:
-                print("未找到目录内容，将使用完整内容...")
-                toc_content = json.dumps(textbook_content, ensure_ascii=False, indent=2)
+            total_hours = state["total_hours"][-1] if state["total_hours"] else 0
             
-            print(f"成功提取目录内容，长度：{len(toc_content)}")
+            # 调用教材处理代理
+            from my_agent.agents.textbook_agent import process_textbook
+            result = process_textbook(textbook_content, total_hours)
             
-            # 计算单元数量
-            import re
-            unit_count = 0
-            chapter_count = 0
-            units = []  # 存储单元名称
+            # 如果是纯图片版本，直接返回结果
+            if result.get("next") == "END":
+                return {
+                    "messages": result["messages"],
+                    "textbook_content": [result["textbook_content"]],
+                    "total_hours": [result["total_hours"]],
+                    "next": ["END"]
+                }
             
-            for line in toc_content.split('\n'):
-                # 匹配单元标题
-                unit_match = re.search(r'第[一二三四五六七八九十\d]+单元[^，。；]*', line)
-                if unit_match:
-                    unit_count += 1
-                    units.append(unit_match.group())
-                # 如果没有单元，匹配章节
-                elif re.search(r'第[一二三四五六七八九十\d]+章', line):
-                    chapter_count += 1
-            
-            # 如果没有找到单元，使用章节作为单元
-            if unit_count == 0:
-                unit_count = chapter_count
-                print(f"未找到单元，使用章节数：{chapter_count}")
-                
-            if unit_count == 0:
-                print("未找到单元或章节数量，将使用默认值")
-                unit_count = 6  # 默认值
-                
-            print(f"检测到单元数量：{unit_count}")
-            if units:
-                print("单元列表：")
-                for unit in units:
-                    print(f"  - {unit}")
-                
-            elapsed_time = time.time() - start_time
-            print(f"教材内容处理完成，耗时：{elapsed_time:.2f}秒")
+            # 构建返回状态
             return {
-                "messages": ["教材内容处理完成"],
-                "textbook_content": [textbook_content],
-                "total_hours": [total_hours],
-                "toc_content": [toc_content],  # 添加目录内容到状态
-                "units": [units],  # 添加单元列表到状态
-                "unit_count": [unit_count],  # 添加单元数量到状态
-                "has_toc": [has_toc]  # 添加是否包含目录的标志
+                "messages": result["messages"],
+                "textbook_content": [result["textbook_content"]],
+                "total_hours": [result["total_hours"]],
+                "toc_content": [result["toc_content"]],
+                "units": [result["units"]],
+                "unit_count": [result["unit_count"]],
+                "has_toc": [result["has_toc"]]
             }
             
         except Exception as e:
-            elapsed_time = time.time() - start_time
-            print(f"错误：处理教材内容失败 - {str(e)}")
-            print(f"失败耗时：{elapsed_time:.2f}秒")
             return {"messages": [f"错误：处理教材内容失败 - {str(e)}"]}
             
     def generate_objectives(self, state: TeachingState) -> TeachingState:
@@ -412,46 +353,30 @@ class TeachingAgent:
     def save_output(self, state: TeachingState) -> TeachingState:
         """保存输出"""
         try:
-            print("\n=== 保存输出 ===")
+            # 获取最新的状态值
+            current_state = {
+                "objectives": state["objectives"][-1] if state["objectives"] else {},
+                "knowledge_points": state["knowledge_points"][-1] if state["knowledge_points"] else {},
+                "activities": state["activities"][-1] if state["activities"] else {},
+                "assessment": state["assessment"][-1] if state["assessment"] else {},
+                "grade": state["grade"][-1] if state["grade"] else "",
+                "subject": state["subject"][-1] if state["subject"] else "",
+                "textbook_content": state["textbook_content"][-1] if state["textbook_content"] else {}
+            }
             
-            # 确保所有必要的状态都存在
-            required_fields = ["objectives", "knowledge_points", "activities", "assessment", "grade", "subject"]
-            for field in required_fields:
-                if field not in state or not state[field]:
-                    raise ValueError(f"缺少必要的状态字段: {field}")
+            # 调用输出处理代理
+            from my_agent.agents.output_agent import save_output
+            result = save_output(current_state)
             
-            # 获取课程名称和教材名称
-            subject = state["subject"][-1]
-            textbook_content = state["textbook_content"][-1] if state["textbook_content"] else {}
-            textbook_name = textbook_content.get("title", "").replace(".pdf", "")  # 从PDF文件名中提取教材名称
-            
-            # 合并所有输出内容
-            output = f"""# {textbook_name if textbook_name else subject}教学大纲
-
-## 一、教学目标
-{state["objectives"][-1]}
-
-## 二、知识点分析
-{state["knowledge_points"][-1]}
-
-## 三、教学活动
-{state["activities"][-1]}
-
-## 四、评估方案
-{state["assessment"][-1]}
-"""
-            
-            # 保存到文件
-            save_lesson_plan_to_md(output, subject, textbook_name)
-            
+            # 构建返回状态
             return {
-                "messages": ["教学大纲已保存"],
-                "objectives": [state["objectives"][-1]],
-                "knowledge_points": [state["knowledge_points"][-1]],
-                "activities": [state["activities"][-1]],
-                "assessment": [state["assessment"][-1]],
-                "grade": [state["grade"][-1]],
-                "subject": [state["subject"][-1]]
+                "messages": result["messages"],
+                "objectives": [result["objectives"]],
+                "knowledge_points": [result["knowledge_points"]],
+                "activities": [result["activities"]],
+                "assessment": [result["assessment"]],
+                "grade": [result["grade"]],
+                "subject": [result["subject"]]
             }
             
         except Exception as e:
