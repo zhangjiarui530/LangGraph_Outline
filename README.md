@@ -1,2 +1,2 @@
 # LangGraph_Outline
-LangGraph_Outline
+通过邮包send方法来实现knowledge_agent的MapReduce，节省输出时间
