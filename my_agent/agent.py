@@ -9,7 +9,7 @@ import json
 import time
 
 from my_agent.agents.objective_agent import generate_objectives, design_objectives
-from my_agent.agents.knowledge_agent import analyze_point_type, get_point_config
+from my_agent.agents.knowledge_agent import create_knowledge_subgraph
 from my_agent.agents.activity_agent import design_activities
 from my_agent.agents.assessment_agent import create_assessment
 from my_agent.utils.pdf_utils import extract_text_from_pdf, is_valid_pdf
@@ -45,12 +45,14 @@ class TeachingAgent:
         # 创建状态图
         self.graph_builder = StateGraph(TeachingState)
         
+        # 创建知识点分析子图
+        knowledge_subgraph = create_knowledge_subgraph()
+        
         # 添加节点
         self.graph_builder.add_node("process_textbook", self.process_textbook)
         self.graph_builder.add_node("generate_objectives", self.generate_objectives)
-        self.graph_builder.add_node("analyze_knowledge", self.analyze_knowledge)
-        self.graph_builder.add_node("analyze_point", self.analyze_point)
-        self.graph_builder.add_node("merge_knowledge", self.merge_knowledge)
+        # 直接添加编译后的子图作为节点
+        self.graph_builder.add_node("analyze_knowledge", knowledge_subgraph)
         self.graph_builder.add_node("design_activities", self.design_activities)
         self.graph_builder.add_node("create_assessment", self.create_assessment)
         self.graph_builder.add_node("save_output", self.save_output)
@@ -60,17 +62,9 @@ class TeachingAgent:
         self.graph_builder.add_edge("process_textbook", "generate_objectives")
         self.graph_builder.add_edge("generate_objectives", "analyze_knowledge")
         
-        # 设置知识点分析的MapReduce流程
-        self.graph_builder.add_conditional_edges(
-            "analyze_knowledge",
-            self.continue_to_point_analysis,
-            ["analyze_point"]
-        )
-        self.graph_builder.add_edge("analyze_point", "merge_knowledge")
-        
         # 设置并发节点
-        self.graph_builder.add_edge("merge_knowledge", "design_activities")
-        self.graph_builder.add_edge("merge_knowledge", "create_assessment")
+        self.graph_builder.add_edge("analyze_knowledge", "design_activities")
+        self.graph_builder.add_edge("analyze_knowledge", "create_assessment")
         
         # 等待并发节点完成后继续
         self.graph_builder.add_edge("design_activities", "save_output")
@@ -170,121 +164,6 @@ class TeachingAgent:
             print(f"错误：生成教学目标失败 - {str(e)}")
             print(f"失败耗时：{elapsed_time:.2f}秒")
             return {"messages": [f"错误：生成教学目标失败 - {str(e)}"]}
-            
-    def continue_to_point_analysis(self, state: TeachingState):
-        """将状态分发到各个知识点分析节点"""
-        point_types = ["basic", "key", "difficult"]
-        
-        # 获取最新的状态值
-        textbook_content = state["textbook_content"][-1] if state["textbook_content"] else {}
-        objectives = state["objectives"][-1] if state["objectives"] else {}
-        grade = state["grade"][-1] if state["grade"] else ""
-        subject = state["subject"][-1] if state["subject"] else ""
-        toc_content = state["toc_content"][-1] if state["toc_content"] else ""
-        units = state["units"][-1] if state["units"] else []
-        unit_count = state["unit_count"][-1] if state["unit_count"] else 0
-        
-        return [
-            Send("analyze_point", {
-                "content": textbook_content,
-                "objectives": objectives,
-                "grade": grade,
-                "subject": subject,
-                "point_type": point_type,
-                "toc_content": toc_content,
-                "units": units,
-                "unit_count": unit_count
-            })
-            for point_type in point_types
-        ]
-            
-    def analyze_knowledge(self, state: TeachingState) -> TeachingState:
-        """分析知识点 - Map阶段"""
-        try:
-            print("\n=== 开始知识点分析 ===")
-            
-            # 获取最新的状态值
-            textbook_content = state["textbook_content"][-1] if state["textbook_content"] else {}
-            objectives = state["objectives"][-1] if state["objectives"] else {}
-            grade = state["grade"][-1] if state["grade"] else ""
-            subject = state["subject"][-1] if state["subject"] else ""
-            toc_content = state["toc_content"][-1] if state["toc_content"] else ""
-            units = state["units"][-1] if state["units"] else []
-            unit_count = state["unit_count"][-1] if state["unit_count"] else 0
-            
-            return {
-                "messages": ["开始知识点分析"],
-                "textbook_content": [textbook_content],
-                "objectives": [objectives],
-                "grade": [grade],
-                "subject": [subject],
-                "toc_content": [toc_content],
-                "units": [units],
-                "unit_count": [unit_count]
-            }
-        except Exception as e:
-            return {"messages": [f"错误：知识点分析初始化失败 - {str(e)}"]}
-            
-    def analyze_point(self, state: TeachingState) -> TeachingState:
-        """分析单个类型的知识点"""
-        start_time = time.time()
-        point_type = state.get("point_type", "")  # 先获取point_type，避免在异常处理中未定义
-        try:
-            # 从状态中获取参数
-            content = {
-                "textbook_content": state.get("content", {}),
-                "toc_content": state.get("toc_content", ""),  # 直接获取toc_content，不需要[-1]
-                "units": state.get("units", []),  # 直接获取units，不需要[-1]
-                "unit_count": state.get("unit_count", 0)  # 直接获取unit_count，不需要[-1]
-            }
-            objectives = state.get("objectives", {})
-            grade = state.get("grade", "")
-            subject = state.get("subject", "")
-            
-            # 调用知识点分析函数
-            result = analyze_point_type(content, objectives, grade, subject, point_type)
-            
-            elapsed_time = time.time() - start_time
-            print(f"{point_type}知识点分析完成，耗时：{elapsed_time:.2f}秒")
-            return {
-                "messages": [f"{point_type}知识点分析完成"],
-                **result  # 这里会添加 {point_type}_points 到状态中
-            }
-        except Exception as e:
-            elapsed_time = time.time() - start_time
-            print(f"错误：{point_type}知识点分析失败 - {str(e)}")
-            print(f"失败耗时：{elapsed_time:.2f}秒")
-            return {"messages": [f"错误：{point_type}知识点分析失败 - {str(e)}"]}
-            
-    def merge_knowledge(self, state: TeachingState) -> TeachingState:
-        """合并知识点分析结果 - Reduce阶段"""
-        try:
-            print("\n=== 合并知识点分析结果 ===")
-            
-            # 从状态中获取各类知识点
-            result = ""
-            point_types = ["basic", "key", "difficult"]
-            
-            for point_type in point_types:
-                points = state.get(f"{point_type}_points", [])
-                if points:
-                    from my_agent.agents.knowledge_agent import get_point_config
-                    config = get_point_config(point_type)
-                    result += f"### {config['title']}\n\n"
-                    for point in points:
-                        result += point.get("content", "") + "\n\n"
-            
-            return {
-                "messages": ["知识点分析完成"],
-                "knowledge_points": [result],
-                "textbook_content": [state["textbook_content"][-1]],
-                "objectives": [state["objectives"][-1]],
-                "grade": [state["grade"][-1]],
-                "subject": [state["subject"][-1]],
-                "total_hours": [state["total_hours"][-1]]
-            }
-        except Exception as e:
-            return {"messages": [f"错误：合并知识点分析结果失败 - {str(e)}"]}
             
     def design_activities(self, state: TeachingState) -> TeachingState:
         """设计教学活动"""
