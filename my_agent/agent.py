@@ -8,7 +8,7 @@ from langgraph.types import Send
 import json
 import time
 
-from my_agent.agents.objective_agent import generate_objectives, design_objectives
+from my_agent.agents.objective_agent import create_objective_subgraph
 from my_agent.agents.knowledge_agent import create_knowledge_subgraph
 from my_agent.agents.activity_agent import design_activities
 from my_agent.agents.assessment_agent import create_assessment
@@ -45,13 +45,14 @@ class TeachingAgent:
         # 创建状态图
         self.graph_builder = StateGraph(TeachingState)
         
-        # 创建知识点分析子图
+        # 创建子图
+        objective_subgraph = create_objective_subgraph()
         knowledge_subgraph = create_knowledge_subgraph()
         
         # 添加节点
         self.graph_builder.add_node("process_textbook", self.process_textbook)
-        self.graph_builder.add_node("generate_objectives", self.generate_objectives)
         # 直接添加编译后的子图作为节点
+        self.graph_builder.add_node("generate_objectives", objective_subgraph)
         self.graph_builder.add_node("analyze_knowledge", knowledge_subgraph)
         self.graph_builder.add_node("design_activities", self.design_activities)
         self.graph_builder.add_node("create_assessment", self.create_assessment)
@@ -108,63 +109,6 @@ class TeachingAgent:
         except Exception as e:
             return {"messages": [f"错误：处理教材内容失败 - {str(e)}"]}
             
-    def generate_objectives(self, state: TeachingState) -> TeachingState:
-        """生成教学目标"""
-        start_time = time.time()
-        try:
-            print("\n=== 生成教学目标 ===")
-            
-            # 获取教材内容
-            textbook_content = state["textbook_content"][-1] if state["textbook_content"] else {}
-            
-            # 获取年级和学科
-            grade = state["grade"][-1] if state["grade"] else "7年级"
-            subject = state["subject"][-1] if state["subject"] else "语文"
-            
-            # 根据是否有目录选择不同的目标生成方法
-            has_toc = state["has_toc"][-1] if state["has_toc"] else False
-            if has_toc:
-                print("检测到教材包含目录，使用design_objectives方法...")
-                # 构建包含目录内容的字典
-                content_dict = {
-                    "textbook_content": textbook_content,
-                    "toc_content": state["toc_content"][-1] if state["toc_content"] else "",
-                    "units": state["units"][-1] if state["units"] else [],
-                    "unit_count": state["unit_count"][-1] if state["unit_count"] else 0
-                }
-                # 将字典内容转换为字符串
-                content_str = json.dumps(content_dict, ensure_ascii=False, indent=2)
-                result = design_objectives(
-                    content_str,
-                    state["total_hours"][-1] if state["total_hours"] else 0,
-                    grade,
-                    subject
-                )
-            else:
-                print("未检测到目录，使用generate_objectives方法...")
-                result = generate_objectives(
-                    textbook_content,
-                    grade,
-                    subject
-                )
-                
-            elapsed_time = time.time() - start_time
-            print(f"教学目标生成完成，耗时：{elapsed_time:.2f}秒")
-            return {
-                "messages": ["教学目标生成完成"],
-                "objectives": [result],
-                "textbook_content": [textbook_content],
-                "total_hours": [state["total_hours"][-1] if state["total_hours"] else 0],
-                "grade": [grade],
-                "subject": [subject]
-            }
-            
-        except Exception as e:
-            elapsed_time = time.time() - start_time
-            print(f"错误：生成教学目标失败 - {str(e)}")
-            print(f"失败耗时：{elapsed_time:.2f}秒")
-            return {"messages": [f"错误：生成教学目标失败 - {str(e)}"]}
-            
     def design_activities(self, state: TeachingState) -> TeachingState:
         """设计教学活动"""
         start_time = time.time()
@@ -183,12 +127,12 @@ class TeachingAgent:
             return {
                 "messages": ["教学活动设计完成"],
                 "activities": [result],
-                "total_hours": [state["total_hours"][-1] if state["total_hours"] else 0],
-                "textbook_content": [state["textbook_content"][-1] if state["textbook_content"] else {}],
-                "objectives": [state["objectives"][-1] if state["objectives"] else {}],
-                "knowledge_points": [state["knowledge_points"][-1] if state["knowledge_points"] else {}],
-                "grade": [state["grade"][-1] if state["grade"] else "7年级"],
-                "subject": [state["subject"][-1] if state["subject"] else "语文"]
+                # "total_hours": [state["total_hours"][-1] if state["total_hours"] else 0],
+                # "textbook_content": [state["textbook_content"][-1] if state["textbook_content"] else {}],
+                # "objectives": [state["objectives"][-1] if state["objectives"] else {}],
+                # "knowledge_points": [state["knowledge_points"][-1] if state["knowledge_points"] else {}],
+                # "grade": [state["grade"][-1] if state["grade"] else "7年级"],
+                # "subject": [state["subject"][-1] if state["subject"] else "语文"]
             }
             
         except Exception as e:
@@ -215,12 +159,12 @@ class TeachingAgent:
             return {
                 "messages": ["评估方案创建完成"],
                 "assessment": [result],
-                "total_hours": [state["total_hours"][-1] if state["total_hours"] else 0],
-                "textbook_content": [state["textbook_content"][-1] if state["textbook_content"] else {}],
-                "objectives": [state["objectives"][-1] if state["objectives"] else {}],
-                "knowledge_points": [state["knowledge_points"][-1] if state["knowledge_points"] else {}],
-                "grade": [state["grade"][-1] if state["grade"] else "7年级"],
-                "subject": [state["subject"][-1] if state["subject"] else "语文"]
+                # "total_hours": [state["total_hours"][-1] if state["total_hours"] else 0],
+                # "textbook_content": [state["textbook_content"][-1] if state["textbook_content"] else {}],
+                # "objectives": [state["objectives"][-1] if state["objectives"] else {}],
+                # "knowledge_points": [state["knowledge_points"][-1] if state["knowledge_points"] else {}],
+                # "grade": [state["grade"][-1] if state["grade"] else "7年级"],
+                # "subject": [state["subject"][-1] if state["subject"] else "语文"]
             }
             
         except Exception as e:
