@@ -1,2 +1,2 @@
 # LangGraph_Outline
-LangGraph_Outline
+将objective_agent、knowledge_agent、activity_agent、assessment_agent都转变为子图，并且objective_agent、knowledge_agent用send进行mapreduce输出
