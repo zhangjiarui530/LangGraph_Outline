@@ -19,8 +19,10 @@ class ObjectiveState(TypedDict):
     units: List[str]  # 单元列表
     unit_count: int  # 单元数量
     has_toc: bool  # 是否包含目录
-    objectives: Annotated[List[Dict[str, Any]], operator.add]
-    messages: Annotated[List[str], operator.add]
+    objectives: Annotated[List[Dict[str, Any]], operator.add]  # 所有目标
+    messages: Annotated[List[str], operator.add]  # 消息列表
+    objective_type: str  # 目标类型
+    objective_count: int  # 目标数量
 
 def create_objective_subgraph() -> StateGraph:
     """创建教学目标子图"""
@@ -29,131 +31,117 @@ def create_objective_subgraph() -> StateGraph:
     print("\n=== 开始生成教学目标 ===")
     
     # 定义子图节点函数
-    def generate_objectives_node(state: ObjectiveState) -> Dict[str, Any]:
-        """生成教学目标节点"""
+    def prepare_objectives(state: ObjectiveState) -> Dict[str, Any]:
+        """准备目标生成的初始状态"""
+        print("生成教学目标")
+        unit_count = state["unit_count"][0] if isinstance(state["unit_count"], list) else state["unit_count"]
+        return {
+            "messages": ["开始生成教学目标"],
+            "objective_types": [
+                {"type": "知识与技能", "count": max(1, unit_count)},
+                {"type": "过程与方法", "count": max(1, (unit_count + 1) // 2)},
+                {"type": "情感态度与价值观", "count": max(1, (unit_count + 1) // 2)},
+                # {"type": "核心素养", "count": max(1, (unit_count + 1) // 2)}
+            ]
+        }
+
+    def continue_to_objectives(state: ObjectiveState) -> List[Send]:
+        """分发到不同类型的目标生成节点"""
+        objective_types = state.get("objective_types", [])
+        return [
+            Send("generate_objective", {
+                **state,
+                "objective_type": obj["type"],
+                "objective_count": obj["count"]
+            })
+            for obj in objective_types
+        ]
+
+    def generate_objective(state: ObjectiveState) -> Dict[str, Any]:
+        """生成特定类型的教学目标"""
         start_time = time.time()
-        try:
-            print("\n=== 生成教学目标 ===")
+        try:            
+            # 构建提示
+            prompt = f"""作为{state['subject']}教师，请基于教材目录设计{state['objective_type']}目标。
+
+要求：
+1. 生成{state['objective_count']}个目标，每个章节或单元都要有所体现
+2. 每个目标用序号标注
+3. 目标要简洁明确，突出重点
+4. 符合{state['grade']}学生认知水平
+5. 体现{state['subject']}学科特点
+
+教材目录：
+```text
+{state['toc_content']}
+```
+"""
             
-            # 构建包含目录内容的字典
-            content = {
-                "textbook_content": state["textbook_content"],
-                "toc_content": state["toc_content"],
-                "units": state["units"],
-                "unit_count": state["unit_count"]
-            }
-            result = design_objectives(
-                content,
-                state["total_hours"],
-                state["grade"],
-                state["subject"]
+            # 调用LLM
+            llm_config = get_llm()
+            response = llm_config.client.chat.completions.create(
+                model=llm_config.model,
+                messages=[
+                    {"role": "system", "content": f"你是{state['subject']}教师，请设计教学目标。"},
+                    {"role": "user", "content": prompt}
+                ]
             )
-                
+            
+            result = response.choices[0].message.content
             elapsed_time = time.time() - start_time
-            print(f"教学目标生成完成，耗时：{elapsed_time:.2f}秒")
+            print(f"{state['objective_type']}目标生成完成，耗时：{elapsed_time:.2f}秒")
+            
             return {
-                "messages": ["教学目标生成完成"],
-                "objectives": [result]
+                "messages": [f"{state['objective_type']}目标生成完成"],
+                "objectives": [{"type": state["objective_type"], "content": result}]
             }
             
         except Exception as e:
             elapsed_time = time.time() - start_time
-            print(f"错误：生成教学目标失败 - {str(e)}")
+            print(f"错误：生成{state['objective_type']}目标失败 - {str(e)}")
             print(f"失败耗时：{elapsed_time:.2f}秒")
-            return {"messages": [f"错误：生成教学目标失败 - {str(e)}"]}
-    
+            return {"messages": [f"错误：生成{state['objective_type']}目标失败 - {str(e)}"]}
+
+    def merge_objectives(state: ObjectiveState) -> Dict[str, Any]:
+        """合并所有类型的教学目标"""
+        try:
+            print("\n=== 合并教学目标 ===")
+            
+            # 从状态中获取目标
+            result = ""
+            # type_order = ["知识与技能", "过程与方法", "情感态度与价值观", "核心素养"]
+            type_order = ["知识与技能", "过程与方法", "情感态度与价值观"]
+            objectives = state.get("objectives", [])
+            
+            for obj_type in type_order:
+                type_objectives = [obj for obj in objectives if obj.get("type") == obj_type]
+                if type_objectives:
+                    result += f"### {obj_type}目标\n\n"
+                    for obj in type_objectives:
+                        if isinstance(obj, dict) and "content" in obj:
+                            result += obj["content"] + "\n\n"
+            
+            print(f"构建的教学目标内容长度: {len(result)}")
+            
+            # 返回合并后的结果
+            return {
+                "messages": ["教学目标合并完成"],
+                "objectives": [result]  # 直接返回字符串，不包装在字典中
+            }
+            
+        except Exception as e:
+            print(f"合并教学目标时出错: {str(e)}")
+            return {"messages": [f"错误：合并教学目标失败 - {str(e)}"]}
+
     # 添加节点
-    graph.add_node("generate_objectives", generate_objectives_node)
+    graph.add_node("prepare", prepare_objectives)
+    graph.add_node("generate_objective", generate_objective)
+    graph.add_node("merge_objectives", merge_objectives)
     
     # 添加边
-    graph.add_edge(START, "generate_objectives")
-    graph.add_edge("generate_objectives", END)
+    graph.add_edge(START, "prepare")
+    graph.add_conditional_edges("prepare", continue_to_objectives, ["generate_objective"])
+    graph.add_edge("generate_objective", "merge_objectives")
+    graph.add_edge("merge_objectives", END)
     
     return graph.compile()
-
-def design_objectives(content: Dict[str, Any], total_hours: int, grade: str, subject: str) -> str:
-    """基于目录设计教学目标"""
-    try:
-        # 获取目录内容
-        toc_content = content.get("toc_content", "")
-        # print(f"目录内容：{toc_content}")
-        # 如果是列表，取第一个元素
-        if isinstance(toc_content, list):
-            toc_content = toc_content[0] if toc_content else ""
-            
-        # 如果没有目录内容，使用完整内容
-        if not toc_content:
-            print("未找到目录内容，将使用完整内容进行分析...")
-            toc_content = json.dumps(content, ensure_ascii=False, indent=2)
-        else:
-            print(f"成功获取目录内容，长度：{len(toc_content)}")
-        
-        # 获取单元信息
-        units = content.get("units", [])
-        unit_count = content.get("unit_count", 0)[0] # 直接使用单元列表长度
-        print(f"单元数量：{unit_count}")
-        
-        # 根据单元数调整目标数量，尽量保持一个单元一个目标
-        knowledge_goals = max(1, unit_count)  # 至少1个
-        process_goals = max(1, (unit_count + 1) // 2)  # 至少1个
-        attitude_goals = max(1, (unit_count + 1) // 2)  # 至少1个
-        competency_goals = max(1, (unit_count + 1) // 2)  # 至少1个
-        
-        # 获取LLM配置
-        llm_config = get_llm()
-        
-        # 构建单元目标提示
-        unit_goals_prompt = ""
-        if units:
-            unit_goals_prompt = "\n单元目标要求：\n"
-            for i, unit in enumerate(units, 1):
-                unit_goals_prompt += f"{i}. {unit}的教学目标应该体现该单元的特点和重点\n"
-        
-        prompt = f"""作为{subject}教师，请基于教材目录设计总课时为{total_hours}课时的教学目标。
-
-请分析目录内容，设计以下四个维度的教学目标：
-
-## 一、知识与技能目标（{knowledge_goals}个）
-> 每个单元列出1个核心知识目标，描述学生应掌握的关键知识点。请用序号标注。
-
-## 二、过程与方法目标（{process_goals}个）
-> 列出培养的关键能力，每2个单元对应1个目标。请用序号标注。
-
-## 三、情感态度与价值观目标（{attitude_goals}个）
-> 列出培养的核心情感态度，每2个单元对应1个目标。请用序号标注。
-
-## 四、核心素养目标（{competency_goals}个）
-> 列出培养的核心素养，每2个单元对应1个目标。请用序号标注。
-
-### 设计要求
-1. 目标表述要简洁明确，突出重点
-2. 符合{grade}学生认知水平
-3. 体现{subject}学科特点
-4. 确保在{total_hours}课时内可完成
-
-{unit_goals_prompt}
-
-### 教材目录
-```text
-{toc_content}
-```
-"""
-        
-        print("\n=== 基于目录设计教学目标 ===")
-        print("调用LLM设计目标...")
-        
-        response = llm_config.client.chat.completions.create(
-            model=llm_config.model,
-            messages=[
-                {"role": "system", "content": f"你是{subject}教师，请简明扼要地设计教学目标。"},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        
-        result = response.choices[0].message.content
-        print("目标设计完成")
-        return result
-        
-    except Exception as e:
-        print(f"错误：设计教学目标失败 - {str(e)}")
-        raise ValueError(f"设计教学目标失败: {str(e)}")

@@ -61,9 +61,11 @@ def main():
         result = agent.run(**config_dict)
         
         # 打印处理日志
-        print("\n=== 处理日志 ===")
-        for message in result.get("messages", []):
-            print(f"系统: {message}")
+        # print("\n=== 处理日志 ===")
+        # messages = result.get("messages", [])
+        # # 只打印最后一条消息
+        # if messages:
+        #     print(f"系统: {messages[-1]}")
             
         print("\n=== 生成完成 ===")
         print("教学大纲已保存到output目录")

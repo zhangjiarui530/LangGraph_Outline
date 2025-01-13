@@ -216,9 +216,9 @@ def create_knowledge_subgraph() -> StateGraph:
                 "messages": ["知识点分析完成"],
                 # "knowledge_points": [{"content": content}],
                 "knowledge_points": [result],  # 直接返回字符串，不包装在字典中
-                "basic_points": state.get("basic_points", []),
-                "key_points": state.get("key_points", []),
-                "difficult_points": state.get("difficult_points", [])
+                # "basic_points": state.get("basic_points", []),
+                # "key_points": state.get("key_points", []),
+                # "difficult_points": state.get("difficult_points", [])
             }
         except Exception as e:
             print(f"合并知识点时出错: {str(e)}")  # 添加错误信息

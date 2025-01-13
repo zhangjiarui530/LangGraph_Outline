@@ -10,8 +10,8 @@ import time
 
 from my_agent.agents.objective_agent import create_objective_subgraph
 from my_agent.agents.knowledge_agent import create_knowledge_subgraph
-from my_agent.agents.activity_agent import design_activities
-from my_agent.agents.assessment_agent import create_assessment
+from my_agent.agents.activity_agent import create_activity_subgraph
+from my_agent.agents.assessment_agent import create_assessment_subgraph
 from my_agent.utils.pdf_utils import extract_text_from_pdf, is_valid_pdf
 from my_agent.utils.file_utils import save_lesson_plan_to_md
 from my_agent.utils.exceptions import PDFExtractionError, LLMGenerationError
@@ -48,14 +48,16 @@ class TeachingAgent:
         # 创建子图
         objective_subgraph = create_objective_subgraph()
         knowledge_subgraph = create_knowledge_subgraph()
+        activity_subgraph = create_activity_subgraph()
+        assessment_subgraph = create_assessment_subgraph()
         
         # 添加节点
         self.graph_builder.add_node("process_textbook", self.process_textbook)
         # 直接添加编译后的子图作为节点
         self.graph_builder.add_node("generate_objectives", objective_subgraph)
         self.graph_builder.add_node("analyze_knowledge", knowledge_subgraph)
-        self.graph_builder.add_node("design_activities", self.design_activities)
-        self.graph_builder.add_node("create_assessment", self.create_assessment)
+        self.graph_builder.add_node("design_activities", activity_subgraph)
+        self.graph_builder.add_node("create_assessment", assessment_subgraph)
         self.graph_builder.add_node("save_output", self.save_output)
         
         # 定义流程
@@ -108,70 +110,6 @@ class TeachingAgent:
             
         except Exception as e:
             return {"messages": [f"错误：处理教材内容失败 - {str(e)}"]}
-            
-    def design_activities(self, state: TeachingState) -> TeachingState:
-        """设计教学活动"""
-        start_time = time.time()
-        try:
-            print("\n=== 设计教学活动 ===")
-            
-            # 调用活动代理
-            result = design_activities(
-                state["knowledge_points"][-1] if state["knowledge_points"] else {},
-                state["total_hours"][-1] if state["total_hours"] else 0,
-                state["grade"][-1] if state["grade"] else "7年级",
-                state["subject"][-1] if state["subject"] else "语文"
-            )
-            elapsed_time = time.time() - start_time
-            print(f"教学活动设计完成，耗时：{elapsed_time:.2f}秒")
-            return {
-                "messages": ["教学活动设计完成"],
-                "activities": [result],
-                # "total_hours": [state["total_hours"][-1] if state["total_hours"] else 0],
-                # "textbook_content": [state["textbook_content"][-1] if state["textbook_content"] else {}],
-                # "objectives": [state["objectives"][-1] if state["objectives"] else {}],
-                # "knowledge_points": [state["knowledge_points"][-1] if state["knowledge_points"] else {}],
-                # "grade": [state["grade"][-1] if state["grade"] else "7年级"],
-                # "subject": [state["subject"][-1] if state["subject"] else "语文"]
-            }
-            
-        except Exception as e:
-            elapsed_time = time.time() - start_time
-            print(f"错误：设计教学活动失败 - {str(e)}")
-            print(f"失败耗时：{elapsed_time:.2f}秒")
-            return {"messages": [f"错误：设计教学活动失败 - {str(e)}"]}
-            
-    def create_assessment(self, state: TeachingState) -> TeachingState:
-        """创建评估方案"""
-        start_time = time.time()
-        try:
-            print("\n=== 创建评估方案 ===")
-            
-            # 调用评估代理
-            result = create_assessment(
-                state["objectives"][-1] if state["objectives"] else {},
-                state["knowledge_points"][-1] if state["knowledge_points"] else {},
-                state["grade"][-1] if state["grade"] else "7年级",
-                state["subject"][-1] if state["subject"] else "语文"
-            )
-            elapsed_time = time.time() - start_time
-            print(f"评估方案创建完成，耗时：{elapsed_time:.2f}秒")
-            return {
-                "messages": ["评估方案创建完成"],
-                "assessment": [result],
-                # "total_hours": [state["total_hours"][-1] if state["total_hours"] else 0],
-                # "textbook_content": [state["textbook_content"][-1] if state["textbook_content"] else {}],
-                # "objectives": [state["objectives"][-1] if state["objectives"] else {}],
-                # "knowledge_points": [state["knowledge_points"][-1] if state["knowledge_points"] else {}],
-                # "grade": [state["grade"][-1] if state["grade"] else "7年级"],
-                # "subject": [state["subject"][-1] if state["subject"] else "语文"]
-            }
-            
-        except Exception as e:
-            elapsed_time = time.time() - start_time
-            print(f"错误：创建评估方案失败 - {str(e)}")
-            print(f"失败耗时：{elapsed_time:.2f}秒")
-            return {"messages": [f"错误：创建评估方案失败 - {str(e)}"]}
             
     def save_output(self, state: TeachingState) -> TeachingState:
         """保存输出"""
