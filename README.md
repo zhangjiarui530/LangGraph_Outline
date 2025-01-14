@@ -1,5 +1,8 @@
 # 教学大纲生成器
 
+用send方法将activity_agent变为mapreduce模式
+实现各个agent的流式输出
+
 基于 LangGraph 的智能教学大纲生成系统。
 
 ## 项目结构
