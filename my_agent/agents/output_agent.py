@@ -16,14 +16,7 @@ def save_output(state: Dict[str, Any]) -> Dict[str, Any]:
             - textbook_content: 教材内容（可选）
             
     Returns:
-        Dict[str, Any]: 处理结果，包含以下字段：
-            - messages: 处理消息列表
-            - objectives: 教学目标
-            - knowledge_points: 知识点分析
-            - activities: 教学活动
-            - assessment: 评估方案
-            - grade: 年级
-            - subject: 学科
+        Dict[str, Any]: 处理结果，包含消息、最终大纲和具体内容
     """
     try:
         print("\n=== 保存输出 ===")
@@ -46,7 +39,7 @@ def save_output(state: Dict[str, Any]) -> Dict[str, Any]:
         assessment_content = assessment_content.replace("|-", "|---")  # 确保分隔线足够长
         
         # 合并所有输出内容
-        output = f"""# {textbook_name if textbook_name else subject}教学大纲
+        final_outline = f"""# {textbook_name if textbook_name else subject}教学大纲
 
 ## 一、教学目标
 {state["objectives"]}
@@ -61,17 +54,18 @@ def save_output(state: Dict[str, Any]) -> Dict[str, Any]:
 {assessment_content}
 """
         
+        # print("生成的final_outline:", final_outline)  # 添加调试日志
+        
         # 保存到文件
-        save_lesson_plan_to_md(output, subject, textbook_name)
+        save_lesson_plan_to_md(final_outline, subject, textbook_name)
         
         return {
             "messages": ["教学大纲已保存"],
+            "final_outline": final_outline,
             "objectives": state["objectives"],
             "knowledge_points": state["knowledge_points"],
             "activities": state["activities"],
-            "assessment": assessment_content,
-            "grade": state["grade"],
-            "subject": state["subject"]
+            "assessment": assessment_content
         }
         
     except Exception as e:

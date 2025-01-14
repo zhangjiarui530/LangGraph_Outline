@@ -2,27 +2,39 @@ from typing import Dict, Any
 import json
 import time
 import re
-from my_agent.utils.pdf_utils import has_table_of_contents, extract_toc_content
+from my_agent.utils.pdf_utils import extract_text_from_pdf, is_valid_pdf, has_table_of_contents, extract_toc_content
 
-def process_textbook(textbook_content: Dict[str, Any], total_hours: int) -> Dict[str, Any]:
+def process_textbook(pdf_path: str, total_hours: int) -> Dict[str, Any]:
     """处理教材内容
     
     Args:
-        textbook_content: 教材内容字典
+        pdf_path: PDF文件路径
         total_hours: 总课时数
         
     Returns:
-        Dict[str, Any]: 处理结果，包含以下字段：
-            - textbook_content: 教材内容
-            - total_hours: 总课时数
-            - toc_content: 目录内容
-            - units: 单元列表
-            - unit_count: 单元数量
-            - has_toc: 是否包含目录
+        Dict[str, Any]: 处理结果
     """
     start_time = time.time()
     try:
         print("\n=== 处理教材内容 ===")
+        
+        # 验证PDF文件
+        if not is_valid_pdf(pdf_path):
+            print("未提供有效的PDF文件，将使用空教材内容继续运行")
+            return {
+                "messages": ["使用空教材内容继续运行"],
+                "textbook_content": {},
+                "total_hours": total_hours,
+                "toc_content": "",
+                "units": [],
+                "unit_count": 6,  # 默认单元数
+                "has_toc": False
+            }
+        
+        # 提取教材内容
+        print("正在提取PDF内容...")
+        textbook_content = extract_text_from_pdf(pdf_path)
+        print("PDF内容提取完成")
         
         # 验证总课时
         if not isinstance(total_hours, int) or total_hours <= 0:

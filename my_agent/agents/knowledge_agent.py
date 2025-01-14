@@ -145,7 +145,14 @@ def create_knowledge_subgraph() -> StateGraph:
     """创建知识点分析子图"""
     # 创建子图构建器
     graph = StateGraph(KnowledgeState)
-    print("\n=== 开始知识点分析 ===")
+    
+    def start_analysis(state: KnowledgeState) -> Dict[str, Any]:
+        """开始知识点分析"""
+        print("\n=== 开始知识点分析 ===")
+        return state
+    
+    # 添加起始节点
+    graph.add_node("start_analysis", start_analysis)
     
     # 定义子图节点函数
     def analyze_point(state: KnowledgeState) -> Dict[str, Any]:
@@ -224,11 +231,12 @@ def create_knowledge_subgraph() -> StateGraph:
             print(f"合并知识点时出错: {str(e)}")  # 添加错误信息
             return {"messages": [f"错误：合并知识点分析结果失败 - {str(e)}"]}
     
+    
     # 添加节点
-    graph.add_node("start_analysis", lambda x: x)  # 添加一个起始节点
     graph.add_node("analyze_point", analyze_point)
     graph.add_node("merge_points", merge_points)
-    
+
+
     # 添加边
     graph.add_edge(START, "start_analysis")
     # 使用条件边来实现map操作

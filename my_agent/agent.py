@@ -1,10 +1,11 @@
-from typing import Dict, Any, List, Annotated
+from typing import Dict, Any, List, Annotated, TypeVar, Optional, Union
 import operator
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.channels.last_value import LastValue
 from langgraph.types import Send
+from langchain_core.messages import HumanMessage
 import json
 import time
 
@@ -12,9 +13,19 @@ from my_agent.agents.objective_agent import create_objective_subgraph
 from my_agent.agents.knowledge_agent import create_knowledge_subgraph
 from my_agent.agents.activity_agent import create_activity_subgraph
 from my_agent.agents.assessment_agent import create_assessment_subgraph
-from my_agent.utils.pdf_utils import extract_text_from_pdf, is_valid_pdf
-from my_agent.utils.file_utils import save_lesson_plan_to_md
-from my_agent.utils.exceptions import PDFExtractionError, LLMGenerationError
+
+class TeachingInputState(TypedDict):
+    """教学输入状态"""
+    messages: List[HumanMessage]  # 输入消息列表
+
+class TeachingOutputState(TypedDict):
+    """教学输出状态"""
+    messages: List[str]  # 处理消息
+    objectives: Dict[str, Any]  # 教学目标
+    knowledge_points: Dict[str, Any]  # 知识点
+    activities: Dict[str, Any]  # 教学活动
+    assessment: Dict[str, Any]  # 评估方案
+    final_outline: Dict[str, Any]  # 最终的教学大纲内容
 
 class TeachingState(TypedDict):
     """教学状态"""
@@ -27,6 +38,7 @@ class TeachingState(TypedDict):
     total_hours: Annotated[List[int], operator.add]
     grade: Annotated[List[str], operator.add]  # 年级
     subject: Annotated[List[str], operator.add]  # 学科
+    pdf_path: Annotated[List[str], operator.add]  # PDF文件路径
     # 添加目录相关的状态
     toc_content: Annotated[List[str], operator.add]  # 目录内容
     units: Annotated[List[List[str]], operator.add]  # 单元列表
@@ -36,13 +48,14 @@ class TeachingState(TypedDict):
     key_points: Annotated[List[Dict[str, Any]], operator.add]
     difficult_points: Annotated[List[Dict[str, Any]], operator.add]
     has_toc: Annotated[List[bool], operator.add]  # 是否包含目录
+    final_outline: Annotated[List[Dict[str, Any]], operator.add]  # 最终的教学大纲内容
 
 class TeachingAgent:
     """教学代理"""
     
     def __init__(self):
         """初始化教学代理"""
-        # 创建状态图
+        # 创建状态图，指定状态类型
         self.graph_builder = StateGraph(TeachingState)
         
         # 创建子图
@@ -80,13 +93,22 @@ class TeachingAgent:
     def process_textbook(self, state: TeachingState) -> TeachingState:
         """处理教材内容"""
         try:
+            print("\n=== 处理教材内容 ===")
+            print(f"接收到的状态: {state}")
+            
             # 获取参数
-            textbook_content = state["textbook_content"][-1] if state["textbook_content"] else {}
-            total_hours = state["total_hours"][-1] if state["total_hours"] else 0
+            if not state.get("pdf_path"):
+                raise ValueError("状态中缺少pdf_path")
+                
+            pdf_path = state["pdf_path"][0]  # 获取第一个元素
+            total_hours = state["total_hours"][0] if state["total_hours"] else 0
+            
+            print(f"从状态获取到的PDF路径: {pdf_path}")
+            print(f"从状态获取到的总课时: {total_hours}")
             
             # 调用教材处理代理
             from my_agent.agents.textbook_agent import process_textbook
-            result = process_textbook(textbook_content, total_hours)
+            result = process_textbook(pdf_path, total_hours)
             
             # 如果是纯图片版本，直接返回结果
             if result.get("next") == "END":
@@ -109,6 +131,7 @@ class TeachingAgent:
             }
             
         except Exception as e:
+            print(f"处理教材内容失败: {str(e)}")
             return {"messages": [f"错误：处理教材内容失败 - {str(e)}"]}
             
     def save_output(self, state: TeachingState) -> TeachingState:
@@ -129,57 +152,58 @@ class TeachingAgent:
             from my_agent.agents.output_agent import save_output
             result = save_output(current_state)
             
-            # 构建返回状态
+            # print("保存输出结果:", result)  # 添加调试日志
+            
+            # 返回消息和最终大纲
             return {
                 "messages": result["messages"],
-                "objectives": [result["objectives"]],
-                "knowledge_points": [result["knowledge_points"]],
-                "activities": [result["activities"]],
-                "assessment": [result["assessment"]],
-                "grade": [result["grade"]],
-                "subject": [result["subject"]]
+                "final_outline": [result["final_outline"]],  # 确保final_outline是字符串
+                "objectives": state["objectives"],
+                "knowledge_points": state["knowledge_points"],
+                "activities": state["activities"],
+                "assessment": state["assessment"]
             }
             
         except Exception as e:
+            print(f"保存输出失败: {str(e)}")  # 添加错误日志
             return {"messages": [f"错误：保存输出失败 - {str(e)}"]}
             
-    def run(self, pdf_path: str, total_hours: int, grade: str, subject: str) -> Dict[str, Any]:
+    def run(self, config: TeachingInputState) -> TeachingOutputState:
         """运行教学代理
         
         Args:
-            pdf_path: PDF文件路径
-            total_hours: 总课时数
-            grade: 年级，默认为7年级
-            subject: 学科，默认为语文
+            config: 教学输入状态，包含以下字段：
+                - messages: List[HumanMessage] 输入消息列表，第一条消息应该是JSON格式的配置
+            
+        Returns:
+            TeachingOutputState: 处理结果，包含处理消息、最终大纲和具体内容
         """
         start_time = time.time()
         try:
+            # 解析第一条消息中的配置
+            if not config["messages"]:
+                raise ValueError("没有输入消息")
+            
+            first_message = config["messages"][0]
+            input_config = json.loads(first_message.content)
+            
             print("\n=== 启动教学代理 ===")
-            print(f"PDF路径: {pdf_path}")
-            print(f"总课时: {total_hours}")
-            print(f"年级: {grade}")
-            print(f"学科: {subject}")
-            
-            # 验证PDF文件
-            if not is_valid_pdf(pdf_path):
-                raise ValueError(f"无效的PDF文件: {pdf_path}")
-            
-            # 提取教材内容
-            print("正在提取PDF内容...")
-            textbook_content = extract_text_from_pdf(pdf_path)
-            print("PDF内容提取完成")
+            print(f"PDF路径: {input_config['pdf_path']}")
+            print(f"总课时: {input_config['total_hours']}")
+            print(f"年级: {input_config['grade']}")
+            print(f"学科: {input_config['subject']}")
             
             # 初始化状态
             initial_state: TeachingState = {
                 "messages": [],
-                "textbook_content": [textbook_content],
+                "textbook_content": [],
                 "objectives": [],
                 "knowledge_points": [],
                 "activities": [],
                 "assessment": [],
-                "total_hours": [total_hours],
-                "grade": [grade],
-                "subject": [subject],
+                "total_hours": [input_config['total_hours']],
+                "grade": [input_config['grade']],
+                "subject": [input_config['subject']],
                 # 添加目录相关的状态初始值
                 "toc_content": [],
                 "units": [],
@@ -188,19 +212,41 @@ class TeachingAgent:
                 "basic_points": [],
                 "key_points": [],
                 "difficult_points": [],
-                "has_toc": [False]
+                "has_toc": [False],
+                "pdf_path": [input_config['pdf_path']],  # 添加PDF路径到状态
+                "final_outline": []
             }
+            
+            print("\n初始状态:")
+            print(f"PDF路径: {initial_state['pdf_path']}")
+            print(f"总课时: {initial_state['total_hours']}")
+            print(f"年级: {initial_state['grade']}")
+            print(f"学科: {initial_state['subject']}")
             
             # 运行状态图
             print("\n开始处理...")
             final_state = self.graph.invoke(initial_state)
             
+            # print("最终状态:", final_state)  # 添加调试日志
+            
+            # 构造输出状态
+            output_state: TeachingOutputState = {
+                "messages": final_state.get("messages", []),
+                "final_outline": final_state.get("final_outline", [""])[-1],  # 确保有默认值
+                "objectives": final_state.get("objectives", [{}])[-1],
+                "knowledge_points": final_state.get("knowledge_points", [{}])[-1],
+                "activities": final_state.get("activities", [{}])[-1],
+                "assessment": final_state.get("assessment", [{}])[-1]
+            }
+            
+            # print("输出状态:", output_state)  # 添加调试日志
+            
             elapsed_time = time.time() - start_time
             print(f"\n处理完成，总耗时：{elapsed_time:.2f}秒")
-            return final_state
+            return output_state
             
         except Exception as e:
             elapsed_time = time.time() - start_time
             print(f"\n错误：教学代理运行失败 - {str(e)}")
-            print(f"失败总耗时：{elapsed_time:.2f}秒")
+            print(f"失败耗时：{elapsed_time:.2f}秒")
             raise

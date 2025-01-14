@@ -28,12 +28,11 @@ def create_objective_subgraph() -> StateGraph:
     """创建教学目标子图"""
     # 创建子图构建器
     graph = StateGraph(ObjectiveState)
-    print("\n=== 开始生成教学目标 ===")
     
     # 定义子图节点函数
     def prepare_objectives(state: ObjectiveState) -> Dict[str, Any]:
         """准备目标生成的初始状态"""
-        print("生成教学目标")
+        print("\n=== 开始生成教学目标 ===")
         unit_count = state["unit_count"][0] if isinstance(state["unit_count"], list) else state["unit_count"]
         return {
             "messages": ["开始生成教学目标"],

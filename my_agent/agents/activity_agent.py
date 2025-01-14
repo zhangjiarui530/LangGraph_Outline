@@ -22,17 +22,19 @@ def create_activity_subgraph() -> StateGraph:
     """创建教学活动子图"""
     # 创建子图构建器
     graph = StateGraph(ActivityState)
-    print("\n=== 开始设计教学活动 ===")
+    
+    def start_activities(state: ActivityState) -> Dict[str, Any]:
+        """开始设计教学活动"""
+        print("\n=== 开始设计教学活动 ===")
+        return state
     
     # 添加起始节点
-    graph.add_node("start_activities", lambda x: x)
+    graph.add_node("start_activities", start_activities)
     
     def design_activities_node(state: ActivityState) -> Dict[str, Any]:
         """设计教学活动节点"""
         start_time = time.time()
-        try:
-            print("\n=== 设计教学活动 ===")
-            
+        try:            
             # 获取最新的状态值，不使用列表
             total_hours = state['total_hours'][0]
             knowledge_points = state['knowledge_points']

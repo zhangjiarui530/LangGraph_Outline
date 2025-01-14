@@ -6,18 +6,38 @@ from my_agent.utils.exceptions import PDFExtractionError, FileOperationError
 def is_valid_pdf(file_path: str) -> bool:
     """检查PDF文件是否有效"""
     try:
+        print(f"正在验证PDF文件: {file_path}")
+        
+        # 规范化文件路径
+        file_path = os.path.normpath(file_path)
+        print(f"规范化后的路径: {file_path}")
+        
         if not os.path.exists(file_path):
+            print(f"文件不存在: {file_path}")
             return False
             
         if not file_path.lower().endswith('.pdf'):
+            print(f"不是PDF文件: {file_path}")
+            return False
+            
+        # 检查文件大小
+        file_size = os.path.getsize(file_path)
+        print(f"文件大小: {file_size} 字节")
+        if file_size == 0:
+            print("文件大小为0")
             return False
             
         # 尝试打开PDF文件
+        print("尝试打开PDF文件...")
         with open(file_path, 'rb') as file:
             reader = PyPDF2.PdfReader(file)
-            if len(reader.pages) == 0:
+            page_count = len(reader.pages)
+            print(f"PDF文件页数: {page_count}")
+            if page_count == 0:
+                print("PDF文件没有页面")
                 return False
                 
+        print("PDF文件验证成功")
         return True
         
     except Exception as e:

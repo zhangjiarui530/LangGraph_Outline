@@ -22,17 +22,19 @@ def create_assessment_subgraph() -> StateGraph:
     """创建评估子图"""
     # 创建子图构建器
     graph = StateGraph(AssessmentState)
-    print("\n=== 开始创建评估方案 ===")
+    
+    def start_assessment(state: AssessmentState) -> Dict[str, Any]:
+        """开始创建评估方案"""
+        print("\n=== 开始创建评估方案 ===")
+        return state
     
     # 添加起始节点
-    graph.add_node("start_assessment", lambda x: x)
+    graph.add_node("start_assessment", start_assessment)
     
     def create_assessment_node(state: AssessmentState) -> Dict[str, Any]:
         """创建评估方案节点"""
         start_time = time.time()
-        try:
-            print("\n=== 创建评估方案 ===")
-            
+        try:            
             # 获取最新的状态值，不使用列表
             objectives = state['objectives']
             knowledge_points = state['knowledge_points']
