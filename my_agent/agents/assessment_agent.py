@@ -114,15 +114,28 @@ def create_assessment_subgraph() -> StateGraph:
             
             # 调用LLM
             llm_config = get_llm()
+            print("\n正在创建评估方案...")
             response = llm_config.client.chat.completions.create(
                 model=llm_config.model,
                 temperature=llm_config.temperature,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
+                stream=True  # 启用流式输出
             )
             
-            result = response.choices[0].message.content
+            # 收集流式输出的内容
+            collected_content = []
+            print("\n评估方案内容：")
+            print("-" * 50)
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    print(content, end="", flush=True)
+                    collected_content.append(content)
+            print("\n" + "-" * 50)
+            
+            result = "".join(collected_content)
             elapsed_time = time.time() - start_time
-            print(f"评估方案创建完成，耗时：{elapsed_time:.2f}秒")
+            print(f"\n评估方案创建完成，耗时：{elapsed_time:.2f}秒")
             
             return {
                 "messages": ["评估方案创建完成"],

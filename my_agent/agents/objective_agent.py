@@ -7,6 +7,7 @@ from my_agent.utils.exceptions import LLMGenerationError
 import operator
 import json
 import time
+from langchain_core.callbacks import StreamingStdOutCallbackHandler
 
 # 定义教学目标子图的状态类型
 class ObjectiveState(TypedDict):
@@ -78,17 +79,34 @@ def create_objective_subgraph() -> StateGraph:
             
             # 调用LLM
             llm_config = get_llm()
+            
+            # 添加流式输出回调
+            callbacks = [StreamingStdOutCallbackHandler()]
+            
+            print(f"\n正在生成{state['objective_type']}目标...")
             response = llm_config.client.chat.completions.create(
                 model=llm_config.model,
                 messages=[
                     {"role": "system", "content": f"你是{state['subject']}教师，请设计教学目标。"},
                     {"role": "user", "content": prompt}
-                ]
+                ],
+                stream=True  # 启用流式输出
             )
             
-            result = response.choices[0].message.content
+            # 收集流式输出的内容
+            collected_content = []
+            print("\n生成内容：")
+            print("-" * 50)
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    print(content, end="", flush=True)
+                    collected_content.append(content)
+            print("\n" + "-" * 50)
+            
+            result = "".join(collected_content)
             elapsed_time = time.time() - start_time
-            print(f"{state['objective_type']}目标生成完成，耗时：{elapsed_time:.2f}秒")
+            print(f"\n{state['objective_type']}目标生成完成，耗时：{elapsed_time:.2f}秒")
             
             return {
                 "messages": [f"{state['objective_type']}目标生成完成"],

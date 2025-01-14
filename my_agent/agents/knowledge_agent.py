@@ -122,17 +122,30 @@ def analyze_point_type(textbook_content: Dict[str, Any], objectives: Dict[str, A
 {toc_content}
 """
         
+        print(f"\n正在分析{config['title']}...")
         response = llm_config.client.chat.completions.create(
             model=llm_config.model,
             messages=[
                 {"role": "system", "content": f"你是一个专业的{subject}教师，擅长分析教材{config['title']}。请从整体角度分析教材，确保知识点覆盖全面，体系完整。输出格式要简约、清晰、层次分明。"},
                 {"role": "user", "content": prompt}
-            ]
+            ],
+            stream=True  # 启用流式输出
         )
         
-        result = response.choices[0].message.content
+        # 收集流式输出的内容
+        collected_content = []
+        print("\n分析内容：")
+        print("-" * 50)
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                print(content, end="", flush=True)
+                collected_content.append(content)
+        print("\n" + "-" * 50)
+        
+        result = "".join(collected_content)
         elapsed_time = time.time() - start_time
-        print(f"{config['title']}分析完成，耗时：{elapsed_time:.2f}秒")
+        print(f"\n{config['title']}分析完成，耗时：{elapsed_time:.2f}秒")
         return {f"{point_type}_points": [{"content": result}]}
         
     except Exception as e:
